@@ -172,12 +172,20 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
 def process_master_data(target_date: str) -> None:
     logger.info(f"=== Master Data Engine started for Date: {target_date} ===")
     
-    # 1. Download ONLY the main file (We don't need UnifiedSolar anymore!)
-    logger.info("Downloading Electrical Optimization (1).xlsx...")
+    # 1. Download BOTH source files
+    logger.info("Downloading Electrical Optimization (1).xlsx (Operator Data)...")
     df_grid = download_excel("Electrical Optimization (1).xlsx")
     
+    logger.info("Downloading UnifiedSolarData.xlsx (Automated Solar Data)...")
+    df_solar = download_excel("UnifiedSolarData.xlsx")
+    
+    # 2. Parse dates safely
     df_grid['Date'] = _robust_parse_date(df_grid['Date'])
+    df_solar['Date'] = _robust_parse_date(df_solar['Date'])
+    
+    # 3. Filter for the target date
     grid_rows = df_grid[df_grid['Date'] == target_date]
+    solar_rows = df_solar[df_solar['Date'] == target_date]
     
     if grid_rows.empty:
         logger.error(f"❌ No Operator Grid/Diesel data found for {target_date}. Aborting.")
@@ -185,32 +193,42 @@ def process_master_data(target_date: str) -> None:
         
     grid_today = grid_rows.iloc[-1]
     
-    # 2. Extract EXACT numbers from Ojas's sheet (No recalculations!)
+    # 4. Extract Grid Data purely from Operator Sheet
     grid_units = _safe_float(_get_fuzzy(grid_today, "gridunits", 0))
-    solar_units = _safe_float(_get_fuzzy(grid_today, "solarunits", 0))
-    total_units = _safe_float(_get_fuzzy(grid_today, "totalunitsconsumed(kwh)", 0))
-    total_cost_inr = _safe_float(_get_fuzzy(grid_today, "consumedin", 0)) # Matches "Total Units Consumed in INR"
-    energy_savings_inr = _safe_float(_get_fuzzy(grid_today, "energysaving", 0))
+    grid_cost_inr = _safe_float(_get_fuzzy(grid_today, "consumedin", 0)) # Ojas's Grid Cost
+    
+    # 5. Extract Solar Data purely from Unified Sheet (No Operator Dependency!)
+    if not solar_rows.empty:
+        solar_today = solar_rows.iloc[-1]
+        # Looks for columns like "Day Generation (kWh)" or "Solar Units"
+        solar_units = _safe_float(_get_fuzzy(solar_today, "daygeneration", _get_fuzzy(solar_today, "solar", 0)))
+    else:
+        logger.warning(f"⚠️ No Solar data found for {target_date} in Unified sheet. Defaulting to 0.")
+        solar_units = 0.0
+        
+    # 6. Calculate True Totals
+    total_units = grid_units + solar_units
+    energy_savings_inr = solar_units * GRID_RATE
     
     logger.info(f"   Grid Units: {grid_units} kWh")
-    logger.info(f"   Solar Units: {solar_units} kWh")
-    logger.info(f"   Total Units: {total_units} kWh")
-    logger.info(f"   Total Cost (INR): ₹{total_cost_inr:,.2f}")
-    logger.info(f"   Savings (INR): ₹{energy_savings_inr:,.2f}")
+    logger.info(f"   Automated Solar Units: {solar_units} kWh")
+    logger.info(f"   Calculated Total Units: {total_units} kWh")
+    logger.info(f"   Grid Cost (INR): ₹{grid_cost_inr:,.2f}")
+    logger.info(f"   Calculated Savings (INR): ₹{energy_savings_inr:,.2f}")
     
     target_dt = pd.to_datetime(target_date)
     
-    # 3. Build the row exactly as Ojas typed it
+    # 7. Build the Master Row (Combining both sources)
     master_row = {
         "Date": target_date,
         "Day": target_dt.strftime("%A"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
-        "Solar Units Consumed(KWh)": solar_units,
-        "Total Units Consumed (KWh)": total_units,
-        "Total Units Consumed in INR": total_cost_inr,
-        "Energy Saving in INR": energy_savings_inr,
+        "Solar Units Consumed(KWh)": solar_units,           # <-- From Unified Sheet
+        "Total Units Consumed (KWh)": total_units,          # <-- Recalculated
+        "Total Units Consumed in INR": grid_cost_inr,       # <-- From Operator Sheet
+        "Energy Saving in INR": round(energy_savings_inr, 2), # <-- Recalculated
         "Number of Panels Cleaned": _get_fuzzy(grid_today, "panelscleaned", 0),
         "Diesel consumed": _get_fuzzy(grid_today, "diesel", "0"),
         "Water treated through STP": _get_fuzzy(grid_today, "stp", "0"),
@@ -223,7 +241,7 @@ def process_master_data(target_date: str) -> None:
         "Inverter_5": _get_fuzzy(grid_today, "inv_5", "")
     }
     
-    # 4. Push to Master Data List
+    # 8. Push to Master Data
     logger.info("Downloading Master-data.xlsx...")
     df_master = download_excel("Master-data.xlsx")
     
@@ -236,7 +254,7 @@ def process_master_data(target_date: str) -> None:
     logger.info("Uploading updated Master-data.xlsx to SharePoint...")
     upload_excel("Master-data.xlsx", df_master)
     logger.info("✅ Master data synchronization SUCCESS!")
-
+    
 if __name__ == "__main__":
     import sys
     from datetime import datetime, timedelta

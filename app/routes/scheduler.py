@@ -1,105 +1,81 @@
-"""
-Scheduler endpoints router
-"""
-from fastapi import APIRouter, UploadFile, File, Query, Body, HTTPException
-from typing import Optional
-from app.core.config import get_settings
-from app.services import scheduler_service
-from app.schemas.scheduler import SchedulerConfig, SchedulerStatus, SendNowRequest
-from app.schemas.common import SuccessResponse
+import os
+import json
+from pathlib import Path
+from fastapi import APIRouter, HTTPException, Body
+from pydantic import BaseModel
+from typing import Optional, Any, Dict
 
-settings = get_settings()
+from app.core.logger import logger
 
-router = APIRouter(prefix="/scheduler", tags=["scheduler"])
+router = APIRouter(tags=["Scheduler Configuration"])
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Configuration Path Setup
+# ──────────────────────────────────────────────────────────────────────────────
+if "WEBSITE_SITE_NAME" in os.environ:
+    # Azure Path
+    CONFIG_PATH = Path("/home/data/energy-dashboard/scheduler_config.json")
+else:
+    # Local Path
+    CONFIG_PATH = Path(__file__).parent.parent.parent / "energy-dashboard" / "scheduler_config.json"
 
-@router.get("/config")
-async def get_scheduler_config():
-    """Get current scheduler configuration"""
-    return scheduler_service.load_scheduler_config()
+# ──────────────────────────────────────────────────────────────────────────────
+# Pydantic Model for Frontend Validation
+# ──────────────────────────────────────────────────────────────────────────────
+class EmailSettings(BaseModel):
+    to: str
+    cc: Optional[str] = ""
+    subject: str
+    auto_start: Optional[bool] = True
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Endpoints
+# ──────────────────────────────────────────────────────────────────────────────
+@router.get("/scheduler/config")
+async def get_scheduler_config() -> Dict[str, Any]:
+    """
+    Fetches the current email and scheduler settings for the frontend UI.
+    """
+    try:
+        if not CONFIG_PATH.exists():
+            # Return default fallback if the file doesn't exist yet
+            return {
+                "to": "umang.mittal@maqsoftware.com",
+                "cc": "",
+                "subject": "Review Noida Daily Energy Optimization Dashboard",
+                "auto_start": True
+            }
+            
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+            
+    except Exception as e:
+        logger.error(f"Failed to read scheduler config: {e}")
+        raise HTTPException(status_code=500, detail="Could not read configuration file.")
 
-@router.put("/config")
-async def update_scheduler_config(config: SchedulerConfig):
-    """Update scheduler configuration"""
-    return scheduler_service.save_scheduler_config(config.dict())
-
-
-@router.get("/status")
-async def get_scheduler_status():
-    """Get scheduler status"""
-    return scheduler_service.get_scheduler_status()
-
-
-@router.post("/start")
-async def start_scheduler(
-    payload: Optional[dict] = Body(default=None),
-    send_time: Optional[str] = Query(default=None, description="Send time in HH:MM format"),
-):
-    """Start background scheduler"""
-    selected_time = send_time
-    if payload and isinstance(payload, dict):
-        selected_time = payload.get("send_time", selected_time)
-    if not selected_time:
-        selected_time = "10:00"
-
-    return scheduler_service.start_scheduler(selected_time)
-
-
-@router.post("/stop")
-async def stop_scheduler():
-    """Stop background scheduler"""
-    return scheduler_service.stop_scheduler()
-
-
-@router.post("/send-now")
-async def send_email_now():
-    """Send email immediately with pre-validation (check if TODAY-1 data exists first)"""
-    result = scheduler_service.run_daily_report_automation(trigger_source="manual_frontend_trigger")
-    if result.get("found") is False:
-        raise HTTPException(status_code=400, detail="Today-1 data not found. Notification sent to stakeholder. Retry in 30 minutes.")
-    if result.get("daily_report", {}).get("status") == "Failed":
-        raise HTTPException(status_code=500, detail=result.get("daily_report", {}).get("notes", "Email send failed"))
-    return result
-
-
-@router.post("/send-now-frontend")
-async def send_email_now_frontend():
-    """Frontend send with pre-validation (check if TODAY-1 data exists before sending)"""
-    result = scheduler_service.run_daily_report_automation(trigger_source="manual_frontend_trigger")
-    if result.get("found") is False:
-        raise HTTPException(status_code=400, detail="Today-1 data not found. Notification sent to stakeholder. Retry in 30 minutes.")
-    if result.get("daily_report", {}).get("status") == "Failed":
-        raise HTTPException(status_code=500, detail=result.get("daily_report", {}).get("notes", "Email send failed"))
-    return result
-
-
-@router.get("/debug/test-email")
-async def test_email_generation():
-    """Debug endpoint to test email generation with pre-validation"""
-    result = scheduler_service.run_daily_report_automation(trigger_source="debug_test")
-    return result
-
-
-@router.get("/history")
-async def get_scheduler_history(limit: int = Query(10, description="Number of entries to return")):
-    """Get scheduler run history"""
-    return scheduler_service.load_scheduler_history(limit)
-
-
-@router.post("/upload-template")
-async def upload_template(file: UploadFile = File(...)):
-    """Upload custom Excel template"""
-    # Save file to uploads directory
-    from pathlib import Path
-    import shutil
-
-    upload_dir = settings.uploaded_templates_dir
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = upload_dir / file.filename
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return scheduler_service.upload_template(str(file_path))
+@router.post("/scheduler/config")
+async def update_scheduler_config(settings: EmailSettings):
+    """
+    Saves new email settings from the frontend into the JSON config file.
+    These changes will be applied immediately on the next automated run.
+    """
+    try:
+        # Ensure the directory exists
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        
+        new_config = settings.model_dump()
+        
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(new_config, f, indent=4)
+            
+        logger.info(f"Frontend updated email settings: To={settings.to}, CC={settings.cc}")
+        
+        return {
+            "status": "success", 
+            "message": "Email configuration updated successfully!",
+            "data": new_config
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to save scheduler config: {e}")
+        raise HTTPException(status_code=500, detail="Could not save configuration file.")
