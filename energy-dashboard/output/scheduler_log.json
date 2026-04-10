@@ -1,0 +1,164 @@
+[
+  {
+    "timestamp": "2026-04-10T10:35:46.586847",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; cutoff_hit=True; report_status=Success; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-10T10:34:47.903505",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; error=SharePoint not authenticated; cutoff_hit=True; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-10T10:33:58.682383",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; error=SharePoint not authenticated; cutoff_hit=True; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:03.612768",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:03.570214",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:54.220210",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:54.163625",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T14:35:54.163625",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T13:03:09.879644",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T13:03:09.831447",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T13:03:09.831447",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T13:01:05.635288",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T13:01:05.600451",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T13:01:05.600451",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T12:29:26.845206",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T12:29:26.803936",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:46.618507",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:46.576636",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  }
+]

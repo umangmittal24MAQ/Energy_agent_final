@@ -1,0 +1,405 @@
+{
+  "data_extraction_info": {
+    "last_update": "2026-03-27T15:49:12.272589",
+    "api_timestamp": 1774512478,
+    "extraction_date": "2026-03-27"
+  },
+  "generation_summary": {
+    "today_generation_kWh": 0.82,
+    "yesterday_generation_kWh": 1.29,
+    "weekly_generation_kWh": 4.78,
+    "monthly_generation_kWh": 16.39,
+    "yearly_generation_kWh": 297.91,
+    "total_cumulative_generation_kWh": 292.2,
+    "capacity_utilization_factor_percent": 0.04
+  },
+  "inverter_details": [
+    {
+      "inverter_id": "686130564c513042747032715a4b496639353331343538324b783042444b4c4965515765644742337647553d",
+      "model_name": "Unknown",
+      "status": 7922851,
+      "dc_voltage_v": 398.1,
+      "dc_current_a": 22.93,
+      "dc_power_w": 9129,
+      "ac_voltage_v": 242.67,
+      "ac_current_a": 35.3,
+      "ac_power_w": 8487,
+      "power_factor": 0.999,
+      "frequency_hz": 49.8,
+      "temperature_internal_c": 48.6,
+      "temperature_heatsink_c": 0,
+      "daily_generation_kwh": 0.07,
+      "total_generation_kwh": 0.28,
+      "apparent_power_va": 8492.77,
+      "reactive_power_var": -313,
+      "run_hours": 33
+    },
+    {
+      "inverter_id": "3051693342766c643967473756555036496b6c4f6d54327851523951503730357a765331784e5a4d4733633d",
+      "model_name": "Unknown",
+      "status": 7922851,
+      "dc_voltage_v": 634.8,
+      "dc_current_a": 57.65,
+      "dc_power_w": 36594,
+      "ac_voltage_v": 242.67,
+      "ac_current_a": 147.6,
+      "ac_power_w": 35760,
+      "power_factor": 1,
+      "frequency_hz": 49.8,
+      "temperature_internal_c": 51.7,
+      "temperature_heatsink_c": 0,
+      "daily_generation_kwh": 0.23,
+      "total_generation_kwh": 83.91,
+      "apparent_power_va": 35760.63,
+      "reactive_power_var": -213,
+      "run_hours": 4452
+    },
+    {
+      "inverter_id": "7a552f5733592f32333171724f666d7a70494e5573466b68395236377574566b4646783356573935396c593d",
+      "model_name": "Unknown",
+      "status": 7922851,
+      "dc_voltage_v": 533.6,
+      "dc_current_a": 63.41,
+      "dc_power_w": 33834,
+      "ac_voltage_v": 243.47,
+      "ac_current_a": 135.4,
+      "ac_power_w": 32899,
+      "power_factor": 0.999,
+      "frequency_hz": 49.8,
+      "temperature_internal_c": 53.1,
+      "temperature_heatsink_c": 0,
+      "daily_generation_kwh": 0.24,
+      "total_generation_kwh": 96.05,
+      "apparent_power_va": 32900.89,
+      "reactive_power_var": -353,
+      "run_hours": 4729
+    },
+    {
+      "inverter_id": "3678496a6d443064704969384f4f6552645476574b776e5238434668376f417948546d336f3152646155493d",
+      "model_name": "Unknown",
+      "status": 1079006317,
+      "dc_voltage_v": 809.3,
+      "dc_current_a": 37.29,
+      "dc_power_w": 30178,
+      "ac_voltage_v": 243.73,
+      "ac_current_a": 121.3,
+      "ac_power_w": 29429,
+      "power_factor": 0.999,
+      "frequency_hz": 49.8,
+      "temperature_internal_c": 49.8,
+      "temperature_heatsink_c": 0,
+      "daily_generation_kwh": 0.2,
+      "total_generation_kwh": 75.17,
+      "apparent_power_va": 29431.09,
+      "reactive_power_var": -351,
+      "run_hours": 4431
+    },
+    {
+      "inverter_id": "776c453272354e6f48626d637978636e592b52515a78787969694f6e5a50764e77536a6f597043475658593d",
+      "model_name": "Unknown",
+      "status": 7922851,
+      "dc_voltage_v": 331.2,
+      "dc_current_a": 29.88,
+      "dc_power_w": 9897,
+      "ac_voltage_v": 242.13,
+      "ac_current_a": 38.1,
+      "ac_power_w": 9402,
+      "power_factor": 0.999,
+      "frequency_hz": 49.8,
+      "temperature_internal_c": 49.5,
+      "temperature_heatsink_c": 0,
+      "daily_generation_kwh": 0.08,
+      "total_generation_kwh": 36.79,
+      "apparent_power_va": 9403.74,
+      "reactive_power_var": -181,
+      "run_hours": 5434
+    }
+  ],
+  "daily_generation_timeline": {
+    "2026-03-01": {
+      "date": "2026-03-01",
+      "generation_kwh": 0.56,
+      "peak_power_kw": null
+    },
+    "2026-03-02": {
+      "date": "2026-03-02",
+      "generation_kwh": 0.83,
+      "peak_power_kw": null
+    },
+    "2026-03-03": {
+      "date": "2026-03-03",
+      "generation_kwh": 0.73,
+      "peak_power_kw": null
+    },
+    "2026-03-04": {
+      "date": "2026-03-04",
+      "generation_kwh": 0.72,
+      "peak_power_kw": null
+    },
+    "2026-03-05": {
+      "date": "2026-03-05",
+      "generation_kwh": 0.68,
+      "peak_power_kw": null
+    },
+    "2026-03-06": {
+      "date": "2026-03-06",
+      "generation_kwh": 0.62,
+      "peak_power_kw": null
+    },
+    "2026-03-07": {
+      "date": "2026-03-07",
+      "generation_kwh": 0.63,
+      "peak_power_kw": null
+    },
+    "2026-03-08": {
+      "date": "2026-03-08",
+      "generation_kwh": 0.46,
+      "peak_power_kw": null
+    },
+    "2026-03-09": {
+      "date": "2026-03-09",
+      "generation_kwh": 0.61,
+      "peak_power_kw": null
+    },
+    "2026-03-10": {
+      "date": "2026-03-10",
+      "generation_kwh": 0.43,
+      "peak_power_kw": null
+    },
+    "2026-03-11": {
+      "date": "2026-03-11",
+      "generation_kwh": 0.7,
+      "peak_power_kw": null
+    },
+    "2026-03-12": {
+      "date": "2026-03-12",
+      "generation_kwh": 0.62,
+      "peak_power_kw": null
+    },
+    "2026-03-13": {
+      "date": "2026-03-13",
+      "generation_kwh": 0.7,
+      "peak_power_kw": null
+    },
+    "2026-03-14": {
+      "date": "2026-03-14",
+      "generation_kwh": 0.5,
+      "peak_power_kw": null
+    },
+    "2026-03-15": {
+      "date": "2026-03-15",
+      "generation_kwh": 0.25,
+      "peak_power_kw": null
+    },
+    "2026-03-16": {
+      "date": "2026-03-16",
+      "generation_kwh": 0.99,
+      "peak_power_kw": null
+    },
+    "2026-03-17": {
+      "date": "2026-03-17",
+      "generation_kwh": 0.77,
+      "peak_power_kw": null
+    },
+    "2026-03-18": {
+      "date": "2026-03-18",
+      "generation_kwh": 0.79,
+      "peak_power_kw": null
+    },
+    "2026-03-19": {
+      "date": "2026-03-19",
+      "generation_kwh": 0.16,
+      "peak_power_kw": null
+    },
+    "2026-03-20": {
+      "date": "2026-03-20",
+      "generation_kwh": 0.2,
+      "peak_power_kw": null
+    },
+    "2026-03-21": {
+      "date": "2026-03-21",
+      "generation_kwh": 0.82,
+      "peak_power_kw": null
+    },
+    "2026-03-22": {
+      "date": "2026-03-22",
+      "generation_kwh": 0.8,
+      "peak_power_kw": null
+    },
+    "2026-03-23": {
+      "date": "2026-03-23",
+      "generation_kwh": 0.18,
+      "peak_power_kw": null
+    },
+    "2026-03-24": {
+      "date": "2026-03-24",
+      "generation_kwh": 1.29,
+      "peak_power_kw": null
+    },
+    "2026-03-25": {
+      "date": "2026-03-25",
+      "generation_kwh": 1.34,
+      "peak_power_kw": null
+    }
+  },
+  "energy_metrics": {
+    "daily_average_kWh": 0.82,
+    "peak_power_kW": 35760,
+    "average_efficiency_percent": 96.09
+  },
+  "system_performance": {
+    "performance_ratio": 0.04,
+    "system_loss_percent": null,
+    "temperature_coefficient": null
+  },
+  "environmental_data": {
+    "irradiance_w_m2": null,
+    "ambient_temperature": null,
+    "module_temperature": 53.1
+  },
+  "device_status": {
+    "plant_status": {
+      "status": "ON",
+      "status_code": 17,
+      "user_status": 0
+    },
+    "device_status_code": 524289,
+    "inverters": {
+      "INV_1": {
+        "status": "ACTIVE",
+        "status_code": 7922851,
+        "user_status": 0,
+        "power_w": 8487,
+        "temperature_c": 48.6
+      },
+      "INV_2": {
+        "status": "ACTIVE",
+        "status_code": 7922851,
+        "user_status": 0,
+        "power_w": 35760,
+        "temperature_c": 51.7
+      },
+      "INV_3": {
+        "status": "ACTIVE",
+        "status_code": 7922851,
+        "user_status": 0,
+        "power_w": 32899,
+        "temperature_c": 53.1
+      },
+      "INV_4": {
+        "status": "ACTIVE",
+        "status_code": 1079006317,
+        "user_status": 0,
+        "power_w": 29429,
+        "temperature_c": 49.8
+      },
+      "INV_5": {
+        "status": "ACTIVE",
+        "status_code": 7922851,
+        "user_status": 0,
+        "power_w": 9402,
+        "temperature_c": 49.5
+      }
+    },
+    "meters": {
+      "SOLAR_METER": {
+        "name": "SOLAR_METER",
+        "online": 1,
+        "status": "ONLINE",
+        "power_w": 115977,
+        "voltage_v": 243.733
+      },
+      "Grid Meter": {
+        "name": "Grid Meter",
+        "online": 1,
+        "status": "ONLINE",
+        "power_w": 183854.553,
+        "voltage_v": 241.827
+      },
+      "DG": {
+        "name": "DG",
+        "online": 1,
+        "status": "ONLINE",
+        "power_w": 0,
+        "voltage_v": 0
+      },
+      "DG_1": {
+        "name": "DG_1",
+        "online": 0,
+        "status": "OFFLINE",
+        "power_w": 183854.553,
+        "voltage_v": 241.827
+      },
+      "DG_2": {
+        "name": "DG_2",
+        "online": 0,
+        "status": "OFFLINE",
+        "power_w": 0,
+        "voltage_v": 0
+      },
+      "DG_3": {
+        "name": "DG_3",
+        "online": 0,
+        "status": "OFFLINE",
+        "power_w": 0,
+        "voltage_v": 0
+      },
+      "DG_3B": {
+        "name": "DG_3B",
+        "online": 0,
+        "status": "OFFLINE",
+        "power_w": 0,
+        "voltage_v": 0
+      }
+    },
+    "smbboxes": {
+      "SMB_1": {
+        "status": "ON",
+        "status_code": 0,
+        "user_status": 0,
+        "power_w": 9212
+      },
+      "SMB_2": {
+        "status": "ON",
+        "status_code": 0,
+        "user_status": 0,
+        "power_w": 36594
+      },
+      "SMB_3": {
+        "status": "ON",
+        "status_code": 0,
+        "user_status": 0,
+        "power_w": 34285
+      },
+      "SMB_4": {
+        "status": "ON",
+        "status_code": 0,
+        "user_status": 0,
+        "power_w": 30178
+      },
+      "SMB_5": {
+        "status": "ON",
+        "status_code": 0,
+        "user_status": 0,
+        "power_w": 9601
+      }
+    }
+  },
+  "plant_info": {
+    "plant_name": "MAQ_SOFTWARE_598.6KWp",
+    "plant_id": "77684d435a685552766e324f373850347a6a4a5771324d797059707864674e4f354b3378465434616e2b4d3d",
+    "device_model": "Mega",
+    "device_sw_version": "2.3.16",
+    "device_hw_version": "1.3.53",
+    "installation_date": "2025-04-02",
+    "latitude": "28.57707050",
+    "longitude": "77.34180310",
+    "timezone": "Asia/Kolkata",
+    "dc_capacity_kwp": 598.6,
+    "ac_capacity_kw": 500.0,
+    "number_of_inverters": 5,
+    "number_of_meters": 5,
+    "co2_mitigation_factor": 0.825,
+    "unit_rate_inr": 10.0
+  }
+}

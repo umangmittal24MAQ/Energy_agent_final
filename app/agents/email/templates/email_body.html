@@ -1,0 +1,325 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Energy Consumption Report</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      background-color: #f4f4f4;
+    "
+  >
+    <table
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="background-color: #f4f4f4; padding: 20px 0"
+    >
+      <tr>
+        <td align="center">
+          <table
+            width="90%"
+            cellpadding="0"
+            cellspacing="0"
+            style="background-color: #ffffff; border: 1px solid #ddd"
+          >
+            <!-- Header -->
+            <tr>
+              <td
+                style="
+                  background-color: #1f3864;
+                  color: #ffffff;
+                  padding: 20px 24px;
+                  font-size: 18px;
+                  font-weight: bold;
+                "
+              >
+                ⚡ Energy Consumption Report - Noida Campus<br />
+                <span
+                  style="font-size: 13px; font-weight: normal; opacity: 0.85"
+                >
+                  Report Date: {{ report_date_display }} &middot; Auto-generated
+                  by Energy Agent
+                </span>
+              </td>
+            </tr>
+
+            {% if include.get('executive_summary', True) %}
+            <!-- Executive Summary -->
+            <tr>
+              <td style="padding: 14px 24px 8px 24px">
+                <div
+                  style="
+                    font-size: 12px;
+                    color: #666;
+                    margin-bottom: 8px;
+                    font-weight: bold;
+                  "
+                >
+                  📊 AI-Generated Insights & Recommendations
+                </div>
+                {{ executive_summary_html }}
+              </td>
+            </tr>
+            {% endif %} {% if include.get('summary_kpis', True) %}
+            <!-- KPI Cards -->
+            <tr>
+              <td style="padding: 20px 24px">
+                <div
+                  style="
+                    font-size: 11px;
+                    color: #5a6f85;
+                    margin: 0 0 8px 2px;
+                    font-weight: bold;
+                  "
+                >
+                  Metrics shown below are for report date: {{
+                  report_date_display }}
+                </div>
+                <table
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  style="border-collapse: separate; border-spacing: 8px 8px"
+                >
+                  <tr>
+                    <td
+                      width="50%"
+                      style="
+                        padding: 12px 18px;
+                        background: #ebf2fb;
+                        border-left: 4px solid #1f3864;
+                        vertical-align: top;
+                      "
+                    >
+                      <div style="font-size: 11px; color: #666">
+                        Total Energy Consumption
+                      </div>
+                      <div
+                        style="
+                          font-size: 30px;
+                          line-height: 1.1;
+                          font-weight: bold;
+                          color: #1f3864;
+                        "
+                      >
+                        {{ kpi_total_kwh }} KWh
+                      </div>
+                      <div
+                        style="font-size: 10px; color: #888; margin-top: 4px"
+                      >
+                        Grid + Solar combined usage
+                      </div>
+                    </td>
+                    <td
+                      width="50%"
+                      style="
+                        padding: 12px 18px;
+                        background: #ebf2fb;
+                        border-left: 4px solid #1f3864;
+                        vertical-align: top;
+                      "
+                    >
+                      <div style="font-size: 11px; color: #666">
+                        Solar Energy Generated
+                      </div>
+                      <div
+                        style="
+                          font-size: 30px;
+                          line-height: 1.1;
+                          font-weight: bold;
+                          color: #1f3864;
+                        "
+                      >
+                        {{ kpi_solar_kwh }} KWh
+                      </div>
+                      <div
+                        style="font-size: 10px; color: #888; margin-top: 4px"
+                      >
+                        From rooftop solar plant
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      width="50%"
+                      style="
+                        padding: 12px 18px;
+                        background: #ebf2fb;
+                        border-left: 4px solid #1f3864;
+                        vertical-align: top;
+                      "
+                    >
+                      <div style="font-size: 11px; color: #666">
+                        Solar Contribution to Total
+                      </div>
+                      <div
+                        style="
+                          font-size: 30px;
+                          line-height: 1.1;
+                          font-weight: bold;
+                          color: #1f3864;
+                        "
+                      >
+                        {{ kpi_solar_pct }}%
+                      </div>
+                      <div
+                        style="font-size: 10px; color: #888; margin-top: 4px"
+                      >
+                        Renewable energy share
+                      </div>
+                    </td>
+                    <td
+                      width="50%"
+                      style="
+                        padding: 12px 18px;
+                        background: #ebf2fb;
+                        border-left: 4px solid #1f3864;
+                        vertical-align: top;
+                      "
+                    >
+                      <div style="font-size: 11px; color: #666">
+                        Total Energy Cost
+                      </div>
+                      <div
+                        style="
+                          font-size: 30px;
+                          line-height: 1.1;
+                          font-weight: bold;
+                          color: #1f3864;
+                        "
+                      >
+                        ₹{{ kpi_total_cost }}
+                      </div>
+                      <div
+                        style="font-size: 10px; color: #888; margin-top: 4px"
+                      >
+                        Grid electricity expense
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td
+                      width="50%"
+                      style="
+                        padding: 12px 18px;
+                        background: #ebf2fb;
+                        border-left: 4px solid #1f3864;
+                        vertical-align: top;
+                      "
+                    >
+                      <div style="font-size: 11px; color: #666">
+                        Cost Savings from Solar
+                      </div>
+                      <div
+                        style="
+                          font-size: 30px;
+                          line-height: 1.1;
+                          font-weight: bold;
+                          color: #1f3864;
+                        "
+                      >
+                        ₹{{ kpi_energy_saved }}
+                      </div>
+                      <div
+                        style="font-size: 10px; color: #888; margin-top: 4px"
+                      >
+                        Saved by campus using solar vs. grid @ ₹7.11/kWh
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            {% endif %} {% if include.get('inverter_status', True) %}
+            <!-- Inverter Status -->
+            <tr>
+              <td style="padding: 8px 24px 4px 24px">
+                <div
+                  style="
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #1f3864;
+                    margin-bottom: 4px;
+                  "
+                >
+                  Inverter Status
+                </div>
+                <div style="font-size: 11px; color: #888; margin-bottom: 8px">
+                  Expected uptime: 24 hours active during daylight hours
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 0 24px 20px 24px">
+                {{ inverter_table_html }}
+              </td>
+            </tr>
+            {% endif %} {% if include.get('unified_table', True) %}
+            <!-- Daily Report -->
+            <tr>
+              <td style="padding: 8px 24px 4px 24px">
+                <div
+                  style="
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: #1f3864;
+                    margin-bottom: 4px;
+                  "
+                >
+                  Daily Report (Last 30 Days)
+                </div>
+                <div
+                  style="font-size: 11px; color: #5a6f85; margin-bottom: 8px"
+                >
+                  📅 Data: {{ table_date_range }}
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 0 24px 20px 24px">{{ ecs_table_html }}</td>
+            </tr>
+            {% endif %} {% if custom_message %}
+            <!-- Custom Message -->
+            <tr>
+              <td
+                style="
+                  padding: 16px 24px;
+                  background-color: #fff8e1;
+                  border-top: 1px solid #eee;
+                  border-bottom: 1px solid #eee;
+                  font-size: 13px;
+                "
+              >
+                {{ custom_message }}
+              </td>
+            </tr>
+            {% endif %}
+
+            <!-- Footer -->
+            <tr>
+              <td
+                style="
+                  background-color: #f0f0f0;
+                  padding: 16px 24px;
+                  font-size: 11px;
+                  color: #888;
+                  text-align: center;
+                  border-top: 1px solid #ddd;
+                "
+              >
+                Generated by Energy Optimization Agent &middot; Noida Campus
+                &middot; Do not reply
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

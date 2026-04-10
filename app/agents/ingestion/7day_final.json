@@ -1,0 +1,227 @@
+{
+  "extraction_info": {
+    "source": "filtered_7day_data.json",
+    "period": "Previous complete days (excluding today)",
+    "window_start": "2026-03-17",
+    "window_end": "2026-03-24",
+    "last_update": "2026-03-25T13:27:18.807154",
+    "extraction_date": "2026-03-25",
+    "fields_included": [
+      "date",
+      "time",
+      "generation_wh",
+      "start_value",
+      "end_value"
+    ]
+  },
+  "daily_values": {
+    "2026-03-24": {
+      "date_formatted": "2026-03-24",
+      "records_count": 0,
+      "records": []
+    },
+    "2026-03-23": {
+      "date_formatted": "Monday, March 23, 2026",
+      "records_count": 5,
+      "records": [
+        {
+          "date": "2026-03-23",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 350944.0,
+          "end_value": 350944.0
+        },
+        {
+          "date": "2026-03-23",
+          "time": "06:05:30",
+          "generation_wh": 112.0,
+          "start_value": 350944.0,
+          "end_value": 351056.0
+        },
+        {
+          "date": "2026-03-23",
+          "time": "15:20:30",
+          "generation_wh": 70.0,
+          "start_value": 288680.0,
+          "end_value": 288750.0
+        },
+        {
+          "date": "2026-03-23",
+          "time": "18:55:30",
+          "generation_wh": 0.0,
+          "start_value": 288750.0,
+          "end_value": 288750.0
+        },
+        {
+          "date": "2026-03-23",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 288750.0,
+          "end_value": 288750.0
+        }
+      ]
+    },
+    "2026-03-22": {
+      "date_formatted": "Sunday, March 22, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-22",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 350142.0,
+          "end_value": 350142.0
+        },
+        {
+          "date": "2026-03-22",
+          "time": "06:00:30",
+          "generation_wh": 802.0,
+          "start_value": 350142.0,
+          "end_value": 350944.0
+        },
+        {
+          "date": "2026-03-22",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 350944.0,
+          "end_value": 350944.0
+        }
+      ]
+    },
+    "2026-03-21": {
+      "date_formatted": "Saturday, March 21, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-21",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 349323.0,
+          "end_value": 349323.0
+        },
+        {
+          "date": "2026-03-21",
+          "time": "06:00:30",
+          "generation_wh": 819.0,
+          "start_value": 349323.0,
+          "end_value": 350142.0
+        },
+        {
+          "date": "2026-03-21",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 350142.0,
+          "end_value": 350142.0
+        }
+      ]
+    },
+    "2026-03-20": {
+      "date_formatted": "Friday, March 20, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-20",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 349128.0,
+          "end_value": 349128.0
+        },
+        {
+          "date": "2026-03-20",
+          "time": "06:00:30",
+          "generation_wh": 195.0,
+          "start_value": 349128.0,
+          "end_value": 349323.0
+        },
+        {
+          "date": "2026-03-20",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 349323.0,
+          "end_value": 349323.0
+        }
+      ]
+    },
+    "2026-03-19": {
+      "date_formatted": "Thursday, March 19, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-19",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 348968.0,
+          "end_value": 348968.0
+        },
+        {
+          "date": "2026-03-19",
+          "time": "06:00:30",
+          "generation_wh": 160.0,
+          "start_value": 348968.0,
+          "end_value": 349128.0
+        },
+        {
+          "date": "2026-03-19",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 349128.0,
+          "end_value": 349128.0
+        }
+      ]
+    },
+    "2026-03-18": {
+      "date_formatted": "Wednesday, March 18, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-18",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 348178.0,
+          "end_value": 348178.0
+        },
+        {
+          "date": "2026-03-18",
+          "time": "06:00:30",
+          "generation_wh": 790.0,
+          "start_value": 348178.0,
+          "end_value": 348968.0
+        },
+        {
+          "date": "2026-03-18",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 348968.0,
+          "end_value": 348968.0
+        }
+      ]
+    },
+    "2026-03-17": {
+      "date_formatted": "Tuesday, March 17, 2026",
+      "records_count": 3,
+      "records": [
+        {
+          "date": "2026-03-17",
+          "time": "00:00:30",
+          "generation_wh": 0.0,
+          "start_value": 347407.0,
+          "end_value": 347407.0
+        },
+        {
+          "date": "2026-03-17",
+          "time": "06:00:30",
+          "generation_wh": 771.0,
+          "start_value": 347407.0,
+          "end_value": 348178.0
+        },
+        {
+          "date": "2026-03-17",
+          "time": "19:00:30",
+          "generation_wh": 0.0,
+          "start_value": 348178.0,
+          "end_value": 348178.0
+        }
+      ]
+    }
+  }
+}

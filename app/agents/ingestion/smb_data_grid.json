@@ -1,0 +1,19 @@
+[
+  {
+    "Date": "2026-03-27",
+    "Day": "Friday",
+    "Time": "15:49:12",
+    "Solar Units Generated (kWh)": 0.82,
+    "Inverter Status": "ON",
+    "SMB1 (kW)": 9.212,
+    "SMB1 Status": "ON",
+    "SMB2 (kW)": 36.594,
+    "SMB2 Status": "ON",
+    "SMB3 (kW)": 34.285,
+    "SMB3 Status": "ON",
+    "SMB4 (kW)": 30.178,
+    "SMB4 Status": "ON",
+    "SMB5 (kW)": 9.601,
+    "SMB5 Status": "ON"
+  }
+]

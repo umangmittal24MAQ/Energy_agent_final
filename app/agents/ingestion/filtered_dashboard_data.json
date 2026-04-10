@@ -1,0 +1,50 @@
+{
+  "dashboard_info": {
+    "last_update": "2026-03-27T15:49:11.114763",
+    "timestamp": 1774512478
+  },
+  "plant_capacity": {
+    "DC_Capacity_kWp": 598.6,
+    "AC_Capacity_kW": 500.0
+  },
+  "power_data": {
+    "DC_Power_kW": 119.63,
+    "AC_Power_kW": 115.98,
+    "Current_Total_A": 477.7,
+    "Current_Average_A": 159.23,
+    "Active_Power_kW": 115.98,
+    "Apparent_Power_kVA": 115.99,
+    "Power_Factor": 0.999,
+    "Frequency_Hz": 49.8
+  },
+  "voltage_data": {
+    "Voltage_VLL_Phase_to_Phase_V": 422.16,
+    "Voltage_VLN_Phase_to_Neutral_V": 243.73,
+    "Voltage_V1_V": 242.4,
+    "Voltage_V2_V": 244.8,
+    "Voltage_V3_V": 244.8
+  },
+  "energy_data": {
+    "Day_Generation_kWh": 818.9,
+    "Day_Import_kWh": null,
+    "Day_Export_kWh": null,
+    "Total_Generation_kWh": null,
+    "Total_Import_kWh": 292196,
+    "Total_Export_kWh": 0
+  },
+  "time_data": {
+    "Start_Time": null,
+    "End_Time": null
+  },
+  "plant_info": {
+    "plant_name": "MAQ_SOFTWARE_598.6KWp",
+    "plant_address": "A3, Sector 145, Near Metro Station, Noida, G. B. Nagar, UP 201 301",
+    "latitude": "28.57707050",
+    "longitude": "77.34180310",
+    "time_zone": "Asia/Kolkata",
+    "plant_installed_date": 1743532200,
+    "device_model": "Mega",
+    "device_sw_version": "2.3.16",
+    "device_hw_version": "1.3.53"
+  }
+}
