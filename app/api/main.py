@@ -73,6 +73,9 @@ def create_app() -> FastAPI:
         from app.routes import data, kpis, export, scheduler
         app.include_router(data.router, prefix="/api")
         app.include_router(kpis.router, prefix="/api")
+        # Add this line near your other app.include_router calls
+        from app.routes import mail
+        app.include_router(mail.router, prefix="/api")
         app.include_router(export.router, prefix="/api")
         app.include_router(scheduler.router, prefix="/api")  # add prefix here
         logger.info("All routers loaded successfully")
