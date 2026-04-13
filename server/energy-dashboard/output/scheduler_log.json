@@ -1,5 +1,45 @@
 [
   {
+    "timestamp": "2026-04-13T14:53:08.555449+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test 20260413-145252]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:52:53.924485+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test 20260413-145228]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:51:44.082992+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:48:22.362689+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "history_log_test",
+    "subject": "[History Log Test] 2026-04-13 14:48:09",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Data for today is not updated. Showing daily energy report till 2026-04-12."
+  },
+  {
     "timestamp": "2026-04-10T10:35:46.586847",
     "status": "Check",
     "recipients": "",

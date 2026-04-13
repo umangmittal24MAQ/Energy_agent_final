@@ -9,11 +9,9 @@ import logging
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
-_daily_report_tracker: Dict[str, bool] = {}
-
 
 # Optional dependency - scheduler is not critical for data endpoints
 try:
@@ -34,7 +32,7 @@ logger = logging.getLogger("app.services.scheduler_service")
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
     # Azure Path: Looks at the persistent storage
-    BASE_DIR = Path("/home/site/wwwroot/energy-dashboard/energy-dashboard")
+    BASE_DIR = Path("/home/data/energy-dashboard")
 else:
     # Local Path: Looks at the folder outside the 'app' directory
     BASE_DIR = Path(__file__).parent.parent.parent / "energy-dashboard"
@@ -43,8 +41,17 @@ BASE_DIR.mkdir(parents=True, exist_ok=True)
 SCHEDULER_CONFIG_FILE = BASE_DIR / "scheduler_config.json"
 SCHEDULER_LOG_FILE = BASE_DIR / "output" / "scheduler_log.json"
 
-SCHEDULER_JOB_ID = "daily_energy_report"
-DAILY_REPORT_CRON_TIME = "10:30"
+SCHEDULER_SLOT_JOB_PREFIX = "daily_slot_"
+SCHEDULER_LEGACY_JOB_ID = "daily_energy_report"
+SLOT_DEFAULT_START_TIME = "09:00"
+SLOT_INTERVAL_MINUTES = 30
+SLOT_COUNT = 4
+
+DATA_STATUS_AVAILABLE = "data_available"
+DATA_STATUS_MISSING = "missing_data"
+DATA_STATUS_FETCH_FAILED = "fetch_failed"
+
+_last_team_report_date: Optional[str] = None
 
 if HAS_SCHEDULER:
     _scheduler = BackgroundScheduler(timezone=ZoneInfo("Asia/Kolkata"))
@@ -62,13 +69,22 @@ def load_scheduler_config() -> Dict[str, Any]:
     """Load scheduler configuration for the UI and Email Service."""
     if SCHEDULER_CONFIG_FILE.exists():
         with open(SCHEDULER_CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {
+            config = json.load(f)
+    else:
+        config = {
         "to": "umang.mittal@maqsoftware.com",
         "cc": "",
+        "start_time": SLOT_DEFAULT_START_TIME,
         "subject": "Review Noida Daily Energy Optimization Dashboard",
         "auto_start": True
     }
+
+    # Backward compatibility with older config key.
+    if "start_time" not in config:
+        config["start_time"] = config.get("send_time", SLOT_DEFAULT_START_TIME)
+
+    config.setdefault("start_time", SLOT_DEFAULT_START_TIME)
+    return config
 
 def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Save configuration updates triggered from the frontend."""
@@ -81,24 +97,42 @@ def get_scheduler_status() -> Dict[str, Any]:
     """Returns the live status of the clock to the frontend dashboard."""
     if not _scheduler:
         return {"status": "stopped", "next_run": None}
-    job = _scheduler.get_job(SCHEDULER_JOB_ID)
+
+    slot_jobs = [
+        job
+        for job in _scheduler.get_jobs()
+        if job.id.startswith(SCHEDULER_SLOT_JOB_PREFIX)
+    ]
+    next_run = None
+    if slot_jobs:
+        next_run_dt = min(
+            [job.next_run_time for job in slot_jobs if job.next_run_time],
+            default=None,
+        )
+        next_run = next_run_dt.isoformat() if next_run_dt else None
+
     return {
-        "status": "running" if job else "stopped",
-        "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None
+        "status": "running" if slot_jobs else "stopped",
+        "next_run": next_run,
     }
 
-def start_scheduler(send_time: str = DAILY_REPORT_CRON_TIME) -> Dict[str, Any]:
-    _schedule_daily_job(send_time)
+def start_scheduler(start_time: str = SLOT_DEFAULT_START_TIME) -> Dict[str, Any]:
+    _schedule_daily_job(start_time)
     cfg = load_scheduler_config()
+    cfg["start_time"] = start_time
     cfg["auto_start"] = True
     save_scheduler_config(cfg)
     return {"status": "running"}
 
 def stop_scheduler() -> Dict[str, Any]:
     if _scheduler:
-        for job_id in [SCHEDULER_JOB_ID, "operator_reminder_9am_930am", "operator_reminder_10am", "suryalogix_scraper_job", "data_refresh_interval"]:
-            if _scheduler.get_job(job_id):
-                _scheduler.remove_job(job_id)
+        for job in list(_scheduler.get_jobs()):
+            if job.id in [
+                SCHEDULER_LEGACY_JOB_ID,
+                "suryalogix_scraper_job",
+                "data_refresh_interval",
+            ] or job.id.startswith(SCHEDULER_SLOT_JOB_PREFIX) or job.id.startswith("operator_reminder_"):
+                _scheduler.remove_job(job.id)
     cfg = load_scheduler_config()
     cfg["auto_start"] = False
     save_scheduler_config(cfg)
@@ -107,71 +141,60 @@ def stop_scheduler() -> Dict[str, Any]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Data Integrity (Ojas-Proof Excel Checks)
 # ──────────────────────────────────────────────────────────────────────────────
-def check_grid_diesel_entry_exists() -> bool:
-    """Check if data exists for TODAY in the grid_and_diesel Excel file."""
-    from app.core.logger import logger
+def check_grid_diesel_entry_status() -> str:
+    """Check the status of today's Grid and Diesel data."""
     try:
-        from .sharepoint_data_service import get_service as get_excel_service
-        import pandas as pd
-        from zoneinfo import ZoneInfo
+        from app.services.sharepoint_data_service import get_service as get_excel_service
         
         sp_excel_service = get_excel_service()
         df = sp_excel_service.fetch_sheet_data("grid_and_diesel")
         
-        if df is None or df.empty:
-            logger.error("[SCHEDULER DEBUG] Excel file is empty or could not be loaded!")
-            return False
+        if df is None:
+            logger.error("[SCHEDULER] Could not fetch Grid and Diesel data from SharePoint.")
+            return DATA_STATUS_FETCH_FAILED
+
+        if df.empty:
+            logger.error("[SCHEDULER] Excel file is empty or could not be loaded!")
+            return DATA_STATUS_MISSING
 
         # --- THE HEADER HUNTER ---
         if any("Unnamed" in str(c) for c in df.columns):
-            logger.warning("[SCHEDULER DEBUG] ⚠️ Detected 'Unnamed' columns. Hunting for the real headers...")
             for i, row in df.head(10).iterrows():
                 if any("date" in str(val).lower() for val in row.values):
-                    df.columns = row.values
+                    df.columns = [str(c).strip() for c in row.values]
                     df = df.iloc[i+1:].reset_index(drop=True)
-                    logger.info(f"[SCHEDULER DEBUG] Found real headers on row {i+2} and fixed the table!")
                     break
-        # -------------------------
             
         IST = ZoneInfo("Asia/Kolkata")
         today = pd.Timestamp.now(tz=IST).date()
         
-        # 1. Dynamically find the date column
         date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
-        
         if not date_col:
-            logger.error(f"[SCHEDULER DEBUG] CRITICAL: No date column found! I only see: {list(df.columns)}")
-            return False
+            logger.error("[SCHEDULER] Could not locate a Date column in Grid and Diesel data.")
+            return DATA_STATUS_FETCH_FAILED
             
-        logger.info(f"[SCHEDULER DEBUG] Found date column named: '{date_col}'")
-            
-        # 2. Parse dates SAFELY
+        # Parse dates safely
         parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
-        
         if parsed_dates.isna().any():
             fallback_str = df[date_col].astype(str).str.strip()
-            ojas_dates = pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce")
-            parsed_dates = parsed_dates.fillna(ojas_dates)
-            general_dates = pd.to_datetime(fallback_str, errors="coerce", dayfirst=True)
-            parsed_dates = parsed_dates.fillna(general_dates)
+            parsed_dates = parsed_dates.fillna(pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce"))
+            parsed_dates = parsed_dates.fillna(pd.to_datetime(fallback_str, errors="coerce", dayfirst=True))
             
         df["_parsed_date"] = parsed_dates.dt.date
         
-        # 3. Check for today
         if not df[df["_parsed_date"] == today].empty:
-            logger.info(f"[SCHEDULER DEBUG] SUCCESS! Found operator data for: {today}")
-            return True
-            
-        # 4. If it fails, print the parsed dates to the Azure log
-        top_3 = df["_parsed_date"].head(3).tolist()
-        logger.error(f"[SCHEDULER DEBUG] Could not find {today} in Excel. Top 3 parsed dates are: {top_3}")
-        return False
+            return DATA_STATUS_AVAILABLE
+
+        return DATA_STATUS_MISSING
         
     except Exception as e:
-        from app.core.logger import logger
-        logger.error(f"[SCHEDULER DEBUG] Crashed: {e}")
-        return False
-    
+        logger.error(f"Error checking grid_and_diesel: {e}")
+        return DATA_STATUS_FETCH_FAILED
+
+def check_grid_diesel_entry_exists() -> bool:
+    """Backward-compatible boolean check for data existence."""
+    return check_grid_diesel_entry_status() == DATA_STATUS_AVAILABLE
+
 def build_energy_report_html(df: pd.DataFrame) -> str:
     """Builds the HTML table rows (<tr>) specifically for email_service.py."""
     rows_html = ""
@@ -227,37 +250,16 @@ def _run_master_data_engine() -> Dict[str, Any]:
         return {"status": "Failed", "error": str(exc.stderr)}
 
 def _run_solar_scraper() -> None:
-    """Runs the SuryaLogix scraper every 30 minutes as a completely isolated subprocess."""
+    """Triggers Playwright API scraper every 30 minutes in the background."""
     try:
-        import subprocess
-        import sys
-        from pathlib import Path
-        from app.core.logger import logger
-        
         logger.info("⏳ Starting 30-minute SuryaLogix Scraper job...")
-        
-        # Find the exact path to scrape_to_sharepoint.py
         backend_root = Path(__file__).parent.parent.parent
         script_path = backend_root / "scrape_to_sharepoint.py"
         
-        # Run it as a separate process
-        result = subprocess.run(
-            [sys.executable, str(script_path)],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        
-        logger.info(f"Scraper completed successfully. Output: {result.stdout[:200]}...")
-
-    except subprocess.CalledProcessError as exc:
-        from app.core.logger import logger
-        logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode})")
-        logger.error(f"--- SCRAPER STDERR ---\n{exc.stderr}")
-        logger.error(f"--- SCRAPER STDOUT ---\n{exc.stdout}")
+        subprocess.run([sys.executable, str(script_path)], capture_output=True, text=True, check=True)
+        logger.info("✅ Scraper completed successfully.")
     except Exception as exc:
-        from app.core.logger import logger
-        logger.error(f"Scraper completely failed to trigger: {exc}")
+        logger.error(f"❌ Scraper failed: {exc}")
 
 def _run_data_refresh() -> None:
     """Tells caching service to pull fresh stats for the UI Dashboard."""
@@ -272,123 +274,116 @@ def _run_data_refresh() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, Any]:
     """The 10:30 AM Main Entry Point"""
-    from app.core.logger import logger
     logger.info(f"Triggering daily report automation via {trigger_source}")
-    from app.services.email_service import send_daily_report
+    from app.services.email_service import (
+        send_daily_report,
+        send_operator_reminder,
+        send_data_fetch_failure_alert,
+    )
     
-    if check_grid_diesel_entry_exists():
-        logger.info("Operator data found. Running Master Data Engine before sending report...")
-        engine_result = _run_master_data_engine()
-        
-        if engine_result["status"] == "Success":
-            # Send the normal report
-            return send_daily_report(trigger_source=trigger_source, is_missing_data=False)
-        else:
-            return {"status": "Error", "notes": "Master Engine Failed"}
-    else:
-        # Operator forgot to submit data by 10:30 AM. 
-        # Skip Master Engine and send the report with the warning flag enabled.
-        logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
-        return send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
+    return _run_slot_check(trigger_source=trigger_source, is_final_slot=True)
 
-def _run_operator_reminder_cycle():
-    """Triggered at 9:00, 9:30, 10:00 to verify data presence before the deadline."""
-    from app.core.logger import logger
-    
-    if not check_grid_diesel_entry_exists():
-        logger.info("Grid data missing! Attempting to send reminder...")
-        from app.services.email_service import send_operator_reminder
-        
-        # Capture the result so we can log it properly for Azure
-        result = send_operator_reminder()
-        
+def _parse_hhmm(value: str, default_value: str) -> tuple[int, int]:
+    try:
+        hh, mm = map(int, str(value).split(":"))
+        return hh, mm
+    except Exception:
+        hh, mm = map(int, default_value.split(":"))
+        return hh, mm
+
+def _build_check_slots(start_time: str) -> list[tuple[int, int, bool]]:
+    start_h, start_m = _parse_hhmm(start_time, SLOT_DEFAULT_START_TIME)
+
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    current = datetime(today.year, today.month, today.day, start_h, start_m)
+
+    slots: list[tuple[int, int, bool]] = []
+    for i in range(SLOT_COUNT):
+        slots.append((current.hour, current.minute, i == SLOT_COUNT - 1))
+        current += timedelta(minutes=SLOT_INTERVAL_MINUTES)
+
+    return slots
+
+
+def _run_slot_check(trigger_source: str, is_final_slot: bool) -> Dict[str, Any]:
+    """Runs one slot check. Sends reminder/report/fallback based on data availability."""
+    global _last_team_report_date
+
+    from app.services.email_service import (
+        send_daily_report,
+        send_operator_reminder,
+        send_data_fetch_failure_alert,
+    )
+
+    now_ist = datetime.now(ZoneInfo("Asia/Kolkata"))
+    today_str = now_ist.strftime("%Y-%m-%d")
+
+    if _last_team_report_date == today_str:
+        return {
+            "status": "Skipped",
+            "notes": "Team report already sent for today",
+        }
+
+    data_status = check_grid_diesel_entry_status()
+
+    if data_status == DATA_STATUS_AVAILABLE:
+        engine_result = _run_master_data_engine()
+        if engine_result["status"] != "Success":
+            return {"status": "Error", "notes": "Master Engine Failed"}
+
+        result = send_daily_report(trigger_source=trigger_source)
         if result.get("status") == "Success":
-            logger.info(f"Reminder Email sent successfully: {result.get('notes')}")
-        else:
-            logger.error(f"Reminder Email FAILED: {result.get('error') or result.get('notes')}")
-    else:
-        logger.info("Grid data is already present. Skipping reminder.")
+            _last_team_report_date = today_str
+        return result
+
+    if data_status == DATA_STATUS_FETCH_FAILED:
+        return send_data_fetch_failure_alert()
+
+    if is_final_slot:
+        prev_date = (now_ist - timedelta(days=1)).strftime("%Y-%m-%d")
+        fallback_note = (
+            f"Data for today is not updated. Showing daily energy report till {prev_date}."
+        )
+        result = send_daily_report(
+            trigger_source=trigger_source,
+            manual_date=prev_date,
+            status_note=fallback_note,
+        )
+        if result.get("status") == "Success":
+            _last_team_report_date = today_str
+        return result
+
+    return send_operator_reminder()
+
+
+def _run_slot_job(slot_label: str, is_final_slot: bool) -> Dict[str, Any]:
+    """APScheduler job wrapper for each slot."""
+    trigger_source = f"scheduler_slot_{slot_label}"
+    return _run_slot_check(trigger_source=trigger_source, is_final_slot=is_final_slot)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Scheduler Initialization
 # ──────────────────────────────────────────────────────────────────────────────
-def _schedule_daily_job(send_time: str) -> None:
+def _schedule_daily_job(start_time: str) -> None:
     _ensure_scheduler_started()
-    
-    from datetime import datetime, timedelta
-    
-    # 1. Parse the starting time safely
-    try:
-        base_time = datetime.strptime(send_time, "%H:%M")
-    except ValueError:
-        # Fallback if frontend sends weird data
-        base_time = datetime.strptime("09:00", "%H:%M")
 
-    # 2. Calculate the dynamic +30 minute intervals
-    cycle_1 = base_time                                # +0 mins
-    cycle_2 = base_time + timedelta(minutes=30)        # +30 mins
-    cycle_3 = base_time + timedelta(minutes=60)        # +60 mins
-    final_cycle = base_time + timedelta(minutes=90)    # +90 mins (Final Report)
+    slots = _build_check_slots(start_time)
 
-    # 3. Main Daily Report (Runs Monday through Saturday on the 4th cycle)
-    _scheduler.add_job(
-        run_daily_report_automation,
-        trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=final_cycle.hour, 
-            minute=final_cycle.minute, 
-            timezone=ZoneInfo("Asia/Kolkata")
-        ),
-        id=SCHEDULER_JOB_ID,
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True
-    )
+    for job in list(_scheduler.get_jobs()):
+        if job.id.startswith(SCHEDULER_SLOT_JOB_PREFIX) or job.id.startswith("operator_reminder_") or job.id == SCHEDULER_LEGACY_JOB_ID:
+            _scheduler.remove_job(job.id)
 
-    # 4. Early Warning 1 (Runs on Cycle 1)
-    _scheduler.add_job(
-        _run_operator_reminder_cycle,
-        trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_1.hour, 
-            minute=cycle_1.minute, 
-            timezone=ZoneInfo("Asia/Kolkata")
-        ),
-        id="operator_reminder_cycle_1",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True
-    )
-    
-    # 5. Early Warning 2 (Runs on Cycle 2)
-    _scheduler.add_job(
-        _run_operator_reminder_cycle,
-        trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_2.hour, 
-            minute=cycle_2.minute, 
-            timezone=ZoneInfo("Asia/Kolkata")
-        ),
-        id="operator_reminder_cycle_2",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True
-    )
-
-    # 6. Final Warning for Operator (Runs on Cycle 3)
-    _scheduler.add_job(
-        _run_operator_reminder_cycle,
-        trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_3.hour, 
-            minute=cycle_3.minute, 
-            timezone=ZoneInfo("Asia/Kolkata")
-        ),
-        id="operator_reminder_cycle_3",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True
-    )
+    for slot_hour, slot_minute, is_final_slot in slots:
+        slot_label = f"{slot_hour:02d}{slot_minute:02d}"
+        _scheduler.add_job(
+            _run_slot_job,
+            args=[slot_label, is_final_slot],
+            trigger=CronTrigger(hour=slot_hour, minute=slot_minute, timezone=ZoneInfo("Asia/Kolkata")),
+            id=f"{SCHEDULER_SLOT_JOB_PREFIX}{slot_label}",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
 
 def initialize_scheduler_from_config() -> None:
     """Boot sequence triggered by main.py."""
@@ -420,4 +415,4 @@ def initialize_scheduler_from_config() -> None:
     # 3. Start Daily Email Clocks
     cfg = load_scheduler_config()
     if cfg.get("auto_start", False):
-        _schedule_daily_job(cfg.get("send_time", DAILY_REPORT_CRON_TIME))
+        _schedule_daily_job(cfg.get("start_time", cfg.get("send_time", SLOT_DEFAULT_START_TIME)))
