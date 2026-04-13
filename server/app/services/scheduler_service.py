@@ -34,7 +34,7 @@ logger = logging.getLogger("app.services.scheduler_service")
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
     # Azure Path: Looks at the persistent storage
-    BASE_DIR = Path("/home/data/energy-dashboard")
+    BASE_DIR = Path("/home/site/wwwroot/energy-dashboard/energy-dashboard")
 else:
     # Local Path: Looks at the folder outside the 'app' directory
     BASE_DIR = Path(__file__).parent.parent.parent / "energy-dashboard"

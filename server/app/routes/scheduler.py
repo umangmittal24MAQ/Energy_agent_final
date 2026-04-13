@@ -14,12 +14,15 @@ router = APIRouter(tags=["Scheduler Configuration"])
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration Path Setup
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Configuration Path Setup
+# ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
-    # Azure Path (Using /home/data/ so it persists across deployments)
-    CONFIG_PATH = Path("/home/data/energy-dashboard/scheduler_config.json")
+    # Azure Path
+    CONFIG_PATH = Path("/home/site/wwwroot/energy-dashboard/scheduler_config.json")
 else:
     # Local Path
-    CONFIG_PATH = Path(__file__).parent.parent.parent / "energy-dashboard" / "scheduler_config.json"
+    CONFIG_PATH = Path(__file__).parent.parent.parent / "energy-dashboard" / "scheduler_config.json""scheduler_config.json"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic Model for Frontend Validation
