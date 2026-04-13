@@ -1,9 +1,8 @@
 """
 FastAPI application setup and middleware configuration
 """
-from dotenv import load_dotenv
-load_dotenv()  # Load environment variables from .env file
-
+import os
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,35 +16,71 @@ from app.services.scheduler_service import initialize_scheduler_from_config, sto
 
 logger = get_logger(__name__)
 
-# Start the background scheduler when Azure boots the app
+# --- 1. THE UNIFIED LIFESPAN MANAGER ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- PHASE A: Verify Environment Variables ---
+    logger.info("\n" + "="*50)
+    logger.info("VERIFYING EMAIL ENVIRONMENT VARIABLES")
+    logger.info("="*50)
+    
+    # Grab the variables
+    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com (Default)")
+    smtp_port = os.getenv("SMTP_PORT", "587 (Default)")
+    email_from = os.getenv("EMAIL_FROM", "[MISSING]")
+    operator_mail = os.getenv("OPERATOR_MAIL", "[MISSING]")  # For Ojas
+    report_mail = os.getenv("REPORT_MAIL", "[MISSING]")      # For CEO
+    
+    email_pwd = os.getenv("EMAIL_PASSWORD")
+    if email_pwd:
+        pwd_status = f"[SET] (Length: {len(email_pwd)})"
+    else:
+        pwd_status = "[MISSING]"
+
+    logger.info(f"SMTP_SERVER   : {smtp_server}")
+    logger.info(f"SMTP_PORT     : {smtp_port}")
+    logger.info(f"EMAIL_FROM    : {email_from}")
+    logger.info(f"OPERATOR_MAIL : {operator_mail}")
+    logger.info(f"REPORT_MAIL   : {report_mail}")
+    logger.info(f"EMAIL_PASSWORD: {pwd_status}")
+    
+    if not email_pwd or email_from == "[MISSING]" or report_mail == "[MISSING]":
+        logger.error("CRITICAL: Core email variables are missing. Automated emails WILL fail.")
+    else:
+        logger.info("SUCCESS: All mail system variables loaded successfully.")
+    
+    logger.info("="*50 + "\n")
+
+    # --- PHASE B: Start the Scheduler ---
     logger.info("Starting background scheduler...")
     initialize_scheduler_from_config()
-    yield
+    
+    # --- YIELD TO FASTAPI (Server is now running) ---
+    yield 
+    
+    # --- PHASE C: Shutdown Logic ---
     logger.info("Shutting down background scheduler...")
     stop_scheduler()
+    logger.info("Server shutting down...")
 
 
+# --- 2. FASTAPI APP CREATION ---
 def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application
-
-    Returns:
-        Configured FastAPI app instance
     """
     settings = get_settings()
 
     # Setup logging
     setup_logging(settings.log_level)
 
-    # Create FastAPI app with lifespan attached
+    # Create FastAPI app with the unified lifespan attached
     app = FastAPI(
         title=settings.app_name,
         description="API for Energy Consumption Dashboard - Noida Campus",
         version=settings.app_version,
         debug=settings.debug,
-        lifespan=lifespan  # <-- Attach the lifecycle manager here
+        lifespan=lifespan  
     )
 
     # Add CORS middleware
@@ -73,14 +108,12 @@ def create_app() -> FastAPI:
 
     # Include routers
     try:
-        from app.routes import data, kpis, export, scheduler
+        from app.routes import data, kpis, export, scheduler, mail
         app.include_router(data.router, prefix="/api")
         app.include_router(kpis.router, prefix="/api")
-        # Add this line near your other app.include_router calls
-        from app.routes import mail
         app.include_router(mail.router, prefix="/api")
         app.include_router(export.router, prefix="/api")
-        app.include_router(scheduler.router, prefix="/api")  # add prefix here
+        app.include_router(scheduler.router, prefix="/api")
         logger.info("All routers loaded successfully")
     except ImportError as e:
         logger.error(f"Failed to import routers: {e}", exc_info=True)
@@ -91,10 +124,8 @@ def create_app() -> FastAPI:
 
     return app
 
-
 def get_app() -> FastAPI:
     """Get the FastAPI application instance"""
     return create_app()
-
 
 app = create_app()

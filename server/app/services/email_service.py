@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo
 
 from app.core.logger import logger
 
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Formatting Helpers (From your strict specifications)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -53,10 +55,20 @@ def normalizeIssueText(value: Any) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
 # ──────────────────────────────────────────────────────────────────────────────
+from typing import Optional, Dict, Any
+from datetime import datetime
+import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+
 def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[str] = None, is_missing_data: bool = False) -> Dict[str, Any]:
     try:
         from app.services.sharepoint_data_service import get_service as get_excel_service
         from app.services.scheduler_service import load_scheduler_config
+        from app.core.logger import logger
         
         logger.info(f"Generating Daily Energy Report (Trigger: {trigger_source})...")
         
@@ -67,15 +79,38 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         if master_df is None or master_df.empty:
             return {"status": "Failed", "notes": "Master data is empty"}
 
+        today = datetime.today()
+        report_dates = []
+
+        # --- 1. DETERMINE DATES (WITH MONDAY LOGIC) ---
         if manual_date:
             row_df = master_df[master_df['Date'] == manual_date]
-            day_data = row_df.iloc[-1].to_dict() if not row_df.empty else {}
+            if not row_df.empty:
+                report_dates.append(str(row_df.iloc[-1].get("Date")))
+            report_date_title = manual_date
         else:
-            day_data = master_df.iloc[-1].to_dict()
-            
-        report_date = str(day_data.get("Date", datetime.today().strftime("%Y-%m-%d")))
+            if today.weekday() == 0:  # 0 is Monday
+                logger.info("Monday detected. Fetching the last 2 rows for the weekend summary.")
+                # Safely grab the last 2 rows
+                weekend_rows = master_df.tail(2)
+                report_dates = [str(row.get("Date")) for _, row in weekend_rows.iterrows()]
+                
+                # Format the title depending on if we actually got 2 rows
+                if len(report_dates) > 1:
+                    report_date_title = f"{report_dates[0]} & {report_dates[1]}"
+                else:
+                    report_date_title = report_dates[0] if report_dates else today.strftime("%Y-%m-%d")
+            else:
+                day_data = master_df.iloc[-1].to_dict()
+                single_date = str(day_data.get("Date", today.strftime("%Y-%m-%d")))
+                report_dates.append(single_date)
+                report_date_title = single_date
 
-        # --- Inject Warning if Data is Missing ---
+        if not report_dates:
+            report_dates = [today.strftime("%Y-%m-%d")]
+            report_date_title = report_dates[0]
+
+        # --- 2. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
             warning_msg = (
                 "<div style='background-color:#ffebee; padding:15px; border-left:4px solid #f44336; color:#d32f2f; margin:18px 24px 0 24px; font-size:14px;'>"
@@ -88,13 +123,26 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             warning_msg = ""
             subject_prefix = ""
 
-        # --- Inject HTML EXACTLY as specified ---
+        # --- 3. INJECT HTML (LOOPING FOR MULTIPLE DAYS) ---
         try:
-            body_html = _build_strict_email_html(master_df, report_date, custom_message=warning_msg)
+            html_parts = []
+            for i, r_date in enumerate(report_dates):
+                # Ensure the red warning box only prints on the very first table
+                current_warning = warning_msg if i == 0 else ""
+                part_html = _build_strict_email_html(master_df, r_date, custom_message=current_warning)
+                html_parts.append(part_html)
+            
+            # Stack the days with a dashed separator if there are multiple
+            if len(html_parts) > 1:
+                separator = "<br><br><hr style='border: 1px dashed #cccccc; margin: 20px 0;'><br><br>"
+                body_html = separator.join(html_parts)
+            else:
+                body_html = html_parts[0]
         except Exception as e:
             logger.error(f"HTML generation failed: {e}")
-            body_html = f"<p>Report generated for {report_date}, but HTML formatting failed.</p>"
+            body_html = f"<p>Report generated for {report_date_title}, but HTML formatting failed.</p>"
 
+        # --- 4. ATTACHMENT AND EMAIL SENDING ---
         try:
             attachment_bytes = _generate_excel_attachment(master_df)
             attachment_name = f"Energy_Report_{datetime.today().strftime('%Y%m%d')}.xlsx"
@@ -108,15 +156,15 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
 
-        operator_email = sched_config.get("to", os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com"))
+        operator_email = sched_config.get("to", os.getenv("REPORT_EMAIL", "umang.mittal@maqsoftware.com"))
         cc_emails_str = sched_config.get("cc", "")
         
         to_list = [e.strip() for e in operator_email.split(',') if e.strip()]
         cc_list = [e.strip() for e in cc_emails_str.split(',') if e.strip()]
         all_recipients = to_list + cc_list
         
-        # Base subject from config, prepended with warning if applicable
-        base_subject = sched_config.get("subject", f"Daily Energy Report - Noida Campus - {report_date}")
+        # Base subject dynamically uses the new report_date_title (e.g., "Date1 & Date2")
+        base_subject = sched_config.get("subject", f"Daily Energy Report - Noida Campus - {report_date_title}")
         subject = f"{subject_prefix}{base_subject}"
 
         msg = MIMEMultipart("alternative")
@@ -141,9 +189,9 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
 
     except Exception as e:
+        from app.core.logger import logger
         logger.error(f"Failed to send daily report: {e}")
         return {"status": "Failed", "error": str(e)}
-
 
 def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message: str = "") -> str:
     """Builds the exact custom HTML table and layout requested by the user."""
@@ -313,8 +361,7 @@ def _generate_excel_attachment(df: pd.DataFrame) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 def send_operator_reminder() -> Dict[str, Any]:
     try:
-        from app.services.scheduler_service import load_scheduler_config
-        sched_config = load_scheduler_config()
+        
         
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         smtp_port = int(os.getenv("SMTP_PORT", 587))
@@ -323,8 +370,8 @@ def send_operator_reminder() -> Dict[str, Any]:
         
         # 1. Fetch TO and CC strings (Prioritize JSON, fallback to .env)
         # Using 'or' ensures that if the JSON value is an empty string "", it looks at the .env
-        operator_email_str = sched_config.get("to") or os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
-        cc_email_str = sched_config.get("cc") or os.getenv("CC_EMAIL", "")
+        operator_email_str =  os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
+        cc_email_str = os.getenv("CC_EMAIL", "")
         
         # 2. Convert comma-separated strings into clean lists
         to_list = [e.strip() for e in operator_email_str.split(',') if e.strip()]

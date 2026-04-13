@@ -12,6 +12,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
+_daily_report_tracker: Dict[str, bool] = {}
+
 
 # Optional dependency - scheduler is not critical for data endpoints
 try:
@@ -312,34 +314,77 @@ def _run_operator_reminder_cycle():
 # ──────────────────────────────────────────────────────────────────────────────
 def _schedule_daily_job(send_time: str) -> None:
     _ensure_scheduler_started()
+    
+    from datetime import datetime, timedelta
+    
+    # 1. Parse the starting time safely
     try:
-        hour, minute = map(int, send_time.split(":"))
+        base_time = datetime.strptime(send_time, "%H:%M")
     except ValueError:
-        hour, minute = 10, 30
+        # Fallback if frontend sends weird data
+        base_time = datetime.strptime("09:00", "%H:%M")
 
-    # 1. Main Daily Report
+    # 2. Calculate the dynamic +30 minute intervals
+    cycle_1 = base_time                                # +0 mins
+    cycle_2 = base_time + timedelta(minutes=30)        # +30 mins
+    cycle_3 = base_time + timedelta(minutes=60)        # +60 mins
+    final_cycle = base_time + timedelta(minutes=90)    # +90 mins (Final Report)
+
+    # 3. Main Daily Report (Runs Monday through Saturday on the 4th cycle)
     _scheduler.add_job(
         run_daily_report_automation,
-        trigger=CronTrigger(hour=hour, minute=minute, timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(
+            day_of_week='mon-sat', 
+            hour=final_cycle.hour, 
+            minute=final_cycle.minute, 
+            timezone=ZoneInfo("Asia/Kolkata")
+        ),
         id=SCHEDULER_JOB_ID,
         replace_existing=True,
         max_instances=1,
         coalesce=True
     )
 
-    # 2. Early Warnings for Operator
+    # 4. Early Warning 1 (Runs on Cycle 1)
     _scheduler.add_job(
         _run_operator_reminder_cycle,
-        trigger=CronTrigger(hour=9, minute="0,30", timezone=ZoneInfo("Asia/Kolkata")),
-        id="operator_reminder_9am_930am",
+        trigger=CronTrigger(
+            day_of_week='mon-sat', 
+            hour=cycle_1.hour, 
+            minute=cycle_1.minute, 
+            timezone=ZoneInfo("Asia/Kolkata")
+        ),
+        id="operator_reminder_cycle_1",
         replace_existing=True,
         max_instances=1,
         coalesce=True
     )
+    
+    # 5. Early Warning 2 (Runs on Cycle 2)
     _scheduler.add_job(
         _run_operator_reminder_cycle,
-        trigger=CronTrigger(hour=10, minute=0, timezone=ZoneInfo("Asia/Kolkata")),
-        id="operator_reminder_10am",
+        trigger=CronTrigger(
+            day_of_week='mon-sat', 
+            hour=cycle_2.hour, 
+            minute=cycle_2.minute, 
+            timezone=ZoneInfo("Asia/Kolkata")
+        ),
+        id="operator_reminder_cycle_2",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True
+    )
+
+    # 6. Final Warning for Operator (Runs on Cycle 3)
+    _scheduler.add_job(
+        _run_operator_reminder_cycle,
+        trigger=CronTrigger(
+            day_of_week='mon-sat', 
+            hour=cycle_3.hour, 
+            minute=cycle_3.minute, 
+            timezone=ZoneInfo("Asia/Kolkata")
+        ),
+        id="operator_reminder_cycle_3",
         replace_existing=True,
         max_instances=1,
         coalesce=True

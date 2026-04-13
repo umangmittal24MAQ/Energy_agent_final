@@ -12,9 +12,13 @@ echo "Verifying and installing dependencies..."
 # Pip will quickly skip packages that are already satisfied.
 python3 -m pip install --upgrade pip --quiet
 python3 -m pip install -r requirements.txt --quiet
-python3 -m playwright install chromium
-echo "Dependencies verified."
 
+# Download Playwright browser
+python3 -m playwright install chromium
+# CRITICAL FIX: Install the missing Linux OS libraries (libglib, etc.) required by Azure!
+python3 -m playwright install-deps chromium 
+
+echo "Dependencies verified."
 
 # Verify app module exists
 if [ ! -d "app" ]; then

@@ -1,11 +1,13 @@
 import os
 import json
+import re
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Body
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Any, Dict
 
 from app.core.logger import logger
+from app.services.scheduler_service import initialize_scheduler_from_config
 
 router = APIRouter(tags=["Scheduler Configuration"])
 
@@ -13,7 +15,7 @@ router = APIRouter(tags=["Scheduler Configuration"])
 # Configuration Path Setup
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
-    # Azure Path
+    # Azure Path (Using /home/data/ so it persists across deployments)
     CONFIG_PATH = Path("/home/data/energy-dashboard/scheduler_config.json")
 else:
     # Local Path
@@ -22,11 +24,20 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic Model for Frontend Validation
 # ──────────────────────────────────────────────────────────────────────────────
-class EmailSettings(BaseModel):
+class SchedulerSettings(BaseModel):
     to: str
     cc: Optional[str] = ""
     subject: str
     auto_start: Optional[bool] = True
+    send_time: str = "09:00"  # Default start time
+
+    @field_validator('send_time')
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        """Ensures the frontend always sends a valid 24-hour HH:MM string."""
+        if not re.match(r"^(?:[01]\d|2[0-3]):[0-5]\d$", v):
+            raise ValueError("Time must be in strict HH:MM 24-hour format (e.g., '09:30').")
+        return v
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Endpoints
@@ -43,7 +54,8 @@ async def get_scheduler_config() -> Dict[str, Any]:
                 "to": "umang.mittal@maqsoftware.com",
                 "cc": "",
                 "subject": "Review Noida Daily Energy Optimization Dashboard",
-                "auto_start": True
+                "auto_start": True,
+                "send_time": "09:00"
             }
             
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -54,10 +66,10 @@ async def get_scheduler_config() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Could not read configuration file.")
 
 @router.post("/scheduler/config")
-async def update_scheduler_config(settings: EmailSettings):
+async def update_scheduler_config(settings: SchedulerSettings):
     """
-    Saves new email settings from the frontend into the JSON config file.
-    These changes will be applied immediately on the next automated run.
+    Saves new settings from the frontend into the JSON config file
+    and instantly triggers a hot-reload of the background scheduler engine.
     """
     try:
         # Ensure the directory exists
@@ -68,11 +80,16 @@ async def update_scheduler_config(settings: EmailSettings):
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(new_config, f, indent=4)
             
-        logger.info(f"Frontend updated email settings: To={settings.to}, CC={settings.cc}")
+        logger.info(f"Frontend updated settings: Time={settings.send_time}, To={settings.to}")
+        
+        # --- THE HOT RELOAD ---
+        # Instantly apply the new timeline to the live server
+        logger.info("Triggering background scheduler hot-reload...")
+        initialize_scheduler_from_config()
         
         return {
             "status": "success", 
-            "message": "Email configuration updated successfully!",
+            "message": f"Configuration updated successfully! The system will now start its checks at {settings.send_time}.",
             "data": new_config
         }
         
