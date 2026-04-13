@@ -160,9 +160,10 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
             return val
     return default
 
-def process_master_data(target_date: str) -> None:
-    logger.info(f"=== Master Data Engine started for Date: {target_date} ===")
-    
+# REPLACE WITH THIS
+def process_master_data(operator_date: str, solar_date: str) -> None:
+    logger.info(f"=== Master Data Engine: operator_date={operator_date}, solar_date={solar_date} ===")
+        
     # 1. Download BOTH source files
     logger.info("Downloading Electrical Optimization (1).xlsx (Operator Data)...")
     df_grid = download_excel("Electrical Optimization (1).xlsx")
@@ -175,11 +176,16 @@ def process_master_data(target_date: str) -> None:
     df_solar['Date'] = _robust_parse_date(df_solar['Date'])
     
     # 3. Filter for the target date
-    grid_rows = df_grid[df_grid['Date'] == target_date]
-    solar_rows = df_solar[df_solar['Date'] == target_date]
-    
+    grid_rows  = df_grid[df_grid['Date'] == operator_date]   # operator wrote today's date
+    solar_rows = df_solar[df_solar['Date'] == solar_date]    # scraper ran on yesterday
+
+    # Take the last solar row at or before 19:30 — that's the true daily peak
+    solar_rows_peak = solar_rows[solar_rows['Time'] <= '19:30']
+    if solar_rows_peak.empty:
+        solar_rows_peak = solar_rows  # fallback: use whatever rows exist
+
     if grid_rows.empty:
-        logger.error(f"❌ No Operator Grid/Diesel data found for {target_date}. Aborting.")
+        logger.error(f"❌ No Operator Grid/Diesel data found for {operator_date}. Aborting.")
         return
         
     grid_today = grid_rows.iloc[-1]
@@ -190,11 +196,11 @@ def process_master_data(target_date: str) -> None:
     
     # 5. Extract Solar Data (WITH SMART FALLBACK)
     automated_solar_units = 0.0
-    if not solar_rows.empty:
-        solar_today = solar_rows.iloc[-1]
+    if not solar_rows_peak.empty:
+        solar_today = solar_rows_peak.iloc[-1]
         automated_solar_units = _safe_float(_get_fuzzy(solar_today, "daygeneration", _get_fuzzy(solar_today, "solar", 0)))
     else:
-        logger.warning(f"⚠️ No Automated Solar data found for {target_date} in Unified sheet.")
+        logger.warning(f"No Automated Solar data found for {solar_date} in UnifiedSolarData.")
 
     manual_solar_units = _safe_float(_get_fuzzy(grid_today, "solar", 0))
 
@@ -202,11 +208,11 @@ def process_master_data(target_date: str) -> None:
         solar_units = automated_solar_units
         solar_source = "Automated Scraper"
     elif manual_solar_units > 0:
-        logger.warning(f"⚠️ Automated solar was 0 or missing. Falling back to Manual Operator Entry ({manual_solar_units} kWh).")
+        logger.warning(f"Automated solar was 0 or missing. Falling back to Manual Operator Entry ({manual_solar_units} kWh).")
         solar_units = manual_solar_units
         solar_source = "Manual Fallback"
     else:
-        logger.warning(f"⚠️ No solar data found from automated OR manual sources. Defaulting to 0.")
+        logger.warning(f" No solar data found from automated OR manual sources. Defaulting to 0.")
         solar_units = 0.0
         solar_source = "None Found"
         
@@ -220,12 +226,13 @@ def process_master_data(target_date: str) -> None:
     logger.info(f"   Grid Cost (INR): ₹{grid_cost_inr:,.2f}")
     logger.info(f"   Calculated Savings (INR): ₹{energy_savings_inr:,.2f}")
     
-    target_dt = pd.to_datetime(target_date)
+    consumption_dt = pd.to_datetime(solar_date) 
     
     # 7. Build the Master Row
     master_row = {
-        "Date": target_date,
-        "Day": target_dt.strftime("%A"),
+        "Date": solar_date,                      
+        "Day":  consumption_dt.strftime("%A"),
+        "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
@@ -250,7 +257,7 @@ def process_master_data(target_date: str) -> None:
     df_master = download_excel("Master-data.xlsx")
     
     df_master['Date_Str'] = _robust_parse_date(df_master['Date'])
-    df_master = df_master[df_master['Date_Str'] != target_date].drop(columns=['Date_Str'])
+    df_master = df_master[df_master['Date_Str'] != solar_date].drop(columns=['Date_Str'])
     
     new_df = pd.DataFrame([master_row])
     df_master = pd.concat([df_master, new_df], ignore_index=True)
@@ -259,12 +266,18 @@ def process_master_data(target_date: str) -> None:
     upload_excel("Master-data.xlsx", df_master)
     logger.info("✅ Master data synchronization SUCCESS!")
     
+# REPLACE WITH THIS
 if __name__ == "__main__":
     import sys
     from datetime import datetime, timedelta
-    if len(sys.argv) > 1: target = sys.argv[1]
-    else: target = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    try: process_master_data(target)
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(IST)
+    # argv[1] = operator_date (TODAY)      e.g. 2026-04-13
+    # argv[2] = solar_date    (YESTERDAY)  e.g. 2026-04-12
+    operator_date = sys.argv[1] if len(sys.argv) > 1 else now.strftime("%Y-%m-%d")
+    solar_date    = sys.argv[2] if len(sys.argv) > 2 else (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    try: process_master_data(operator_date, solar_date)
     except Exception as e:
         logger.error(f"❌ Master Engine Failed: {e}")
         sys.exit(1)

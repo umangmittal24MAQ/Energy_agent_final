@@ -29,7 +29,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
+import time
 import pandas as pd
 import requests
 from dotenv import load_dotenv
@@ -172,6 +172,19 @@ def _upload_excel(file_bytes: bytes) -> None:
         timeout=60,
     )
     resp.raise_for_status()
+
+
+def _upload_excel_with_retry(file_bytes: bytes, retries: int = 3, delay: int = 10) -> None:
+    for attempt in range(1, retries + 1):
+        try:
+            _upload_excel(file_bytes)
+            return
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 423 and attempt < retries:
+                logger.warning(f"⚠️ File locked (attempt {attempt}/{retries}). Retrying in {delay}s...")
+                time.sleep(delay)
+            else:
+                raise
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Scraper  — identical to working scrape.py (plain new_context, same timings)
@@ -492,7 +505,7 @@ def main() -> None:
         original = _download_excel()
         updated  = update_excel_in_memory(original, row)
         logger.info("Uploading updated file back to SharePoint…")
-        _upload_excel(updated)
+        _upload_excel_with_retry(updated)
         logger.info("✅ SharePoint upload SUCCESS!")
     except Exception as exc:
         logger.error(f"❌ SharePoint pipeline FAILED: {exc}")

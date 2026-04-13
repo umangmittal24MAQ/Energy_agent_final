@@ -4,23 +4,18 @@ APP_DIR="/home/site/wwwroot"
 echo "Starting app from: $APP_DIR"
 cd $APP_DIR
 
-# Add the app directory to PYTHONPATH so absolute imports work cleanly
 export PYTHONPATH=$APP_DIR:$PYTHONPATH
 
 echo "Verifying and installing dependencies..."
-# Running pip install every time ensures Azure doesn't lose packages after a container restart.
-# Pip will quickly skip packages that are already satisfied.
-python3 -m pip install --upgrade pip --quiet
-python3 -m pip install -r requirements.txt --quiet
+python3 -m pip install --upgrade pip -q
+python3 -m pip install -r requirements.txt -q
 
-# Download Playwright browser
+# OS libraries FIRST, then browser binary
+python3 -m playwright install-deps chromium
 python3 -m playwright install chromium
-# CRITICAL FIX: Install the missing Linux OS libraries (libglib, etc.) required by Azure!
-python3 -m playwright install-deps chromium 
 
 echo "Dependencies verified."
 
-# Verify app module exists
 if [ ! -d "app" ]; then
     echo "ERROR: app directory not found in $APP_DIR"
     ls -la
@@ -28,9 +23,6 @@ if [ ! -d "app" ]; then
 fi
 
 echo "Starting gunicorn with 1 worker..."
-
-# CRITICAL FIX: --workers 1 prevents 4 separate background schedulers from 
-# spinning up and sending 4 duplicate emails or locking the SharePoint files.
 python3 -m gunicorn app.api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \

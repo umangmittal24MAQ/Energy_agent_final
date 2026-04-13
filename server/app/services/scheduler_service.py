@@ -9,7 +9,7 @@ import logging
 import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
 _daily_report_tracker: Dict[str, bool] = {}
@@ -207,15 +207,20 @@ def build_energy_report_html(df: pd.DataFrame) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Core Automation Dispatches
 # ──────────────────────────────────────────────────────────────────────────────
+# REPLACE WITH THIS
 def _run_master_data_engine() -> Dict[str, Any]:
     """Runs the Master Data merge in an isolated subprocess to prevent memory leaks."""
     try:
-        target_date_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d")
-        logger.info(f"Master data engine running for date: {target_date_str}")
-        
+        IST = ZoneInfo("Asia/Kolkata")
+        now = datetime.now(IST)
+        operator_date = now.strftime("%Y-%m-%d")                        # TODAY   e.g. 2026-04-13
+        solar_date    = (now - timedelta(days=1)).strftime("%Y-%m-%d")  # YESTERDAY e.g. 2026-04-12
+
+        logger.info(f"Master data engine: operator_date={operator_date}, solar_date={solar_date}")
+
         backend_root = Path(__file__).parent.parent.parent
         subprocess.run(
-            [sys.executable, "-m", "app.agents.master_data_engine", target_date_str],
+            [sys.executable, "-m", "app.agents.master_data_engine", operator_date, solar_date],
             cwd=str(backend_root),
             capture_output=True,
             text=True,
