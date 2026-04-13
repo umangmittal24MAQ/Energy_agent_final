@@ -93,7 +93,6 @@ def upload_excel(filename: str, df: pd.DataFrame) -> None:
     safe_path = requests.utils.quote(file_path, safe="/")
     url = f"{GRAPH_BASE}/sites/{site_id}/drives/{drive_id}/root:/{safe_path}:/content"
     
-    # Write dataframe to in-memory bytes
     output_buffer = io.BytesIO()
     with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Sheet1', index=False)
@@ -117,12 +116,10 @@ def download_excel(filename: str) -> pd.DataFrame:
     resp.raise_for_status()
     df = pd.read_excel(io.BytesIO(resp.content), sheet_name="Sheet1")
     
-    # --- THE HEADER HUNTER & CLEANER ---
     if any("Unnamed" in str(c) for c in df.columns):
         logger.info(f"Detected 'Unnamed' columns in {filename}. Hunting for real headers...")
         for i, row in df.head(10).iterrows():
             if any("date" in str(val).lower() for val in row.values):
-                # Clean headers: remove invisible newlines and spaces
                 df.columns = [str(c).strip().replace('\n', ' ') for c in row.values]
                 df = df.iloc[i+1:].reset_index(drop=True)
                 logger.info(f"✅ Found real headers and fixed the table for {filename}!")
@@ -148,7 +145,6 @@ def _robust_parse_date(series: pd.Series) -> pd.Series:
     return parsed.dt.strftime("%Y-%m-%d")
 
 def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
-    """Finds a column containing the keyword and returns its exact value, formatting Time to HH:MM."""
     kw_lower = keyword.lower().replace(" ", "").replace("\n", "")
     for col in row.index:
         col_lower = str(col).lower().replace(" ", "").replace("\n", "")
@@ -156,16 +152,11 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
             val = row[col]
             if pd.isna(val) or str(val).strip() == "":
                 return default
-            
-            # --- NEW: Specific formatting for Time ---
             if kw_lower == "time":
                 try:
-                    # If it's a datetime object or a time string, format it to HH:MM
                     return pd.to_datetime(val).strftime("%H:%M")
                 except:
-                    # If parsing fails (e.g., it's already a weird string), just strip it
                     return str(val).strip()[:5]
-            
             return val
     return default
 
@@ -195,40 +186,53 @@ def process_master_data(target_date: str) -> None:
     
     # 4. Extract Grid Data purely from Operator Sheet
     grid_units = _safe_float(_get_fuzzy(grid_today, "gridunits", 0))
-    grid_cost_inr = _safe_float(_get_fuzzy(grid_today, "consumedin", 0)) # Ojas's Grid Cost
+    grid_cost_inr = _safe_float(_get_fuzzy(grid_today, "consumedin", 0))
     
-    # 5. Extract Solar Data purely from Unified Sheet (No Operator Dependency!)
+    # 5. Extract Solar Data (WITH SMART FALLBACK)
+    automated_solar_units = 0.0
     if not solar_rows.empty:
         solar_today = solar_rows.iloc[-1]
-        # Looks for columns like "Day Generation (kWh)" or "Solar Units"
-        solar_units = _safe_float(_get_fuzzy(solar_today, "daygeneration", _get_fuzzy(solar_today, "solar", 0)))
+        automated_solar_units = _safe_float(_get_fuzzy(solar_today, "daygeneration", _get_fuzzy(solar_today, "solar", 0)))
     else:
-        logger.warning(f"⚠️ No Solar data found for {target_date} in Unified sheet. Defaulting to 0.")
+        logger.warning(f"⚠️ No Automated Solar data found for {target_date} in Unified sheet.")
+
+    manual_solar_units = _safe_float(_get_fuzzy(grid_today, "solar", 0))
+
+    if automated_solar_units > 0:
+        solar_units = automated_solar_units
+        solar_source = "Automated Scraper"
+    elif manual_solar_units > 0:
+        logger.warning(f"⚠️ Automated solar was 0 or missing. Falling back to Manual Operator Entry ({manual_solar_units} kWh).")
+        solar_units = manual_solar_units
+        solar_source = "Manual Fallback"
+    else:
+        logger.warning(f"⚠️ No solar data found from automated OR manual sources. Defaulting to 0.")
         solar_units = 0.0
+        solar_source = "None Found"
         
     # 6. Calculate True Totals
     total_units = grid_units + solar_units
     energy_savings_inr = solar_units * GRID_RATE
     
     logger.info(f"   Grid Units: {grid_units} kWh")
-    logger.info(f"   Automated Solar Units: {solar_units} kWh")
+    logger.info(f"   Solar Units: {solar_units} kWh (Source: {solar_source})")
     logger.info(f"   Calculated Total Units: {total_units} kWh")
     logger.info(f"   Grid Cost (INR): ₹{grid_cost_inr:,.2f}")
     logger.info(f"   Calculated Savings (INR): ₹{energy_savings_inr:,.2f}")
     
     target_dt = pd.to_datetime(target_date)
     
-    # 7. Build the Master Row (Combining both sources)
+    # 7. Build the Master Row
     master_row = {
         "Date": target_date,
         "Day": target_dt.strftime("%A"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
-        "Solar Units Consumed(KWh)": solar_units,           # <-- From Unified Sheet
-        "Total Units Consumed (KWh)": total_units,          # <-- Recalculated
-        "Total Units Consumed in INR": grid_cost_inr,       # <-- From Operator Sheet
-        "Energy Saving in INR": round(energy_savings_inr, 2), # <-- Recalculated
+        "Solar Units Consumed(KWh)": solar_units,
+        "Total Units Consumed (KWh)": total_units,
+        "Total Units Consumed in INR": grid_cost_inr,
+        "Energy Saving in INR": round(energy_savings_inr, 2),
         "Number of Panels Cleaned": _get_fuzzy(grid_today, "panelscleaned", 0),
         "Diesel consumed": _get_fuzzy(grid_today, "diesel", "0"),
         "Water treated through STP": _get_fuzzy(grid_today, "stp", "0"),

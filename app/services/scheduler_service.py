@@ -106,50 +106,70 @@ def stop_scheduler() -> Dict[str, Any]:
 # Data Integrity (Ojas-Proof Excel Checks)
 # ──────────────────────────────────────────────────────────────────────────────
 def check_grid_diesel_entry_exists() -> bool:
-    """Check if data exists for TODAY in the Grid and Diesel Excel file."""
+    """Check if data exists for TODAY in the grid_and_diesel Excel file."""
+    from app.core.logger import logger
     try:
-        from app.services.sharepoint_data_service import get_service as get_excel_service
+        from .sharepoint_data_service import get_service as get_excel_service
+        import pandas as pd
+        from zoneinfo import ZoneInfo
         
         sp_excel_service = get_excel_service()
         df = sp_excel_service.fetch_sheet_data("grid_and_diesel")
         
         if df is None or df.empty:
-            logger.error("[SCHEDULER] Excel file is empty or could not be loaded!")
+            logger.error("[SCHEDULER DEBUG] Excel file is empty or could not be loaded!")
             return False
 
         # --- THE HEADER HUNTER ---
         if any("Unnamed" in str(c) for c in df.columns):
+            logger.warning("[SCHEDULER DEBUG] ⚠️ Detected 'Unnamed' columns. Hunting for the real headers...")
             for i, row in df.head(10).iterrows():
                 if any("date" in str(val).lower() for val in row.values):
-                    df.columns = [str(c).strip() for c in row.values]
+                    df.columns = row.values
                     df = df.iloc[i+1:].reset_index(drop=True)
+                    logger.info(f"[SCHEDULER DEBUG] Found real headers on row {i+2} and fixed the table!")
                     break
+        # -------------------------
             
         IST = ZoneInfo("Asia/Kolkata")
         today = pd.Timestamp.now(tz=IST).date()
         
+        # 1. Dynamically find the date column
         date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
+        
         if not date_col:
+            logger.error(f"[SCHEDULER DEBUG] CRITICAL: No date column found! I only see: {list(df.columns)}")
             return False
             
-        # Parse dates safely
+        logger.info(f"[SCHEDULER DEBUG] Found date column named: '{date_col}'")
+            
+        # 2. Parse dates SAFELY
         parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
+        
         if parsed_dates.isna().any():
             fallback_str = df[date_col].astype(str).str.strip()
-            parsed_dates = parsed_dates.fillna(pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce"))
-            parsed_dates = parsed_dates.fillna(pd.to_datetime(fallback_str, errors="coerce", dayfirst=True))
+            ojas_dates = pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce")
+            parsed_dates = parsed_dates.fillna(ojas_dates)
+            general_dates = pd.to_datetime(fallback_str, errors="coerce", dayfirst=True)
+            parsed_dates = parsed_dates.fillna(general_dates)
             
         df["_parsed_date"] = parsed_dates.dt.date
         
+        # 3. Check for today
         if not df[df["_parsed_date"] == today].empty:
+            logger.info(f"[SCHEDULER DEBUG] SUCCESS! Found operator data for: {today}")
             return True
             
+        # 4. If it fails, print the parsed dates to the Azure log
+        top_3 = df["_parsed_date"].head(3).tolist()
+        logger.error(f"[SCHEDULER DEBUG] Could not find {today} in Excel. Top 3 parsed dates are: {top_3}")
         return False
         
     except Exception as e:
-        logger.error(f"Error checking grid_and_diesel: {e}")
+        from app.core.logger import logger
+        logger.error(f"[SCHEDULER DEBUG] Crashed: {e}")
         return False
-
+    
 def build_energy_report_html(df: pd.DataFrame) -> str:
     """Builds the HTML table rows (<tr>) specifically for email_service.py."""
     rows_html = ""
@@ -205,16 +225,37 @@ def _run_master_data_engine() -> Dict[str, Any]:
         return {"status": "Failed", "error": str(exc.stderr)}
 
 def _run_solar_scraper() -> None:
-    """Triggers Playwright API scraper every 30 minutes in the background."""
+    """Runs the SuryaLogix scraper every 30 minutes as a completely isolated subprocess."""
     try:
+        import subprocess
+        import sys
+        from pathlib import Path
+        from app.core.logger import logger
+        
         logger.info("⏳ Starting 30-minute SuryaLogix Scraper job...")
+        
+        # Find the exact path to scrape_to_sharepoint.py
         backend_root = Path(__file__).parent.parent.parent
         script_path = backend_root / "scrape_to_sharepoint.py"
         
-        subprocess.run([sys.executable, str(script_path)], capture_output=True, text=True, check=True)
-        logger.info("✅ Scraper completed successfully.")
+        # Run it as a separate process
+        result = subprocess.run(
+            [sys.executable, str(script_path)],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        logger.info(f"Scraper completed successfully. Output: {result.stdout[:200]}...")
+
+    except subprocess.CalledProcessError as exc:
+        from app.core.logger import logger
+        logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode})")
+        logger.error(f"--- SCRAPER STDERR ---\n{exc.stderr}")
+        logger.error(f"--- SCRAPER STDOUT ---\n{exc.stdout}")
     except Exception as exc:
-        logger.error(f"❌ Scraper failed: {exc}")
+        from app.core.logger import logger
+        logger.error(f"Scraper completely failed to trigger: {exc}")
 
 def _run_data_refresh() -> None:
     """Tells caching service to pull fresh stats for the UI Dashboard."""
@@ -229,25 +270,42 @@ def _run_data_refresh() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, Any]:
     """The 10:30 AM Main Entry Point"""
+    from app.core.logger import logger
     logger.info(f"Triggering daily report automation via {trigger_source}")
-    from app.services.email_service import send_daily_report, send_operator_reminder
+    from app.services.email_service import send_daily_report
     
     if check_grid_diesel_entry_exists():
+        logger.info("Operator data found. Running Master Data Engine before sending report...")
         engine_result = _run_master_data_engine()
+        
         if engine_result["status"] == "Success":
-            return send_daily_report(trigger_source=trigger_source)
+            # Send the normal report
+            return send_daily_report(trigger_source=trigger_source, is_missing_data=False)
         else:
             return {"status": "Error", "notes": "Master Engine Failed"}
     else:
-        # Operator forgot to submit data by 10:30 AM. Send missing alert instead.
-        return send_operator_reminder()
+        # Operator forgot to submit data by 10:30 AM. 
+        # Skip Master Engine and send the report with the warning flag enabled.
+        logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
+        return send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
 
 def _run_operator_reminder_cycle():
     """Triggered at 9:00, 9:30, 10:00 to verify data presence before the deadline."""
+    from app.core.logger import logger
+    
     if not check_grid_diesel_entry_exists():
-        logger.info("Grid data missing! Sending operator reminder.")
+        logger.info("Grid data missing! Attempting to send reminder...")
         from app.services.email_service import send_operator_reminder
-        send_operator_reminder()
+        
+        # Capture the result so we can log it properly for Azure
+        result = send_operator_reminder()
+        
+        if result.get("status") == "Success":
+            logger.info(f"Reminder Email sent successfully: {result.get('notes')}")
+        else:
+            logger.error(f"Reminder Email FAILED: {result.get('error') or result.get('notes')}")
+    else:
+        logger.info("Grid data is already present. Skipping reminder.")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Scheduler Initialization

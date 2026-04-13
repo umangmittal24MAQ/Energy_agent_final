@@ -22,3 +22,4 @@ prometheus-client>=0.18.0
 schedule>=1.2.1
 playwright>=1.42.0
 email-validator
+pydantic[email]

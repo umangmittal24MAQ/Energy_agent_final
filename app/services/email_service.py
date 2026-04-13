@@ -53,7 +53,99 @@ def normalizeIssueText(value: Any) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
 # ──────────────────────────────────────────────────────────────────────────────
-def _build_strict_email_html(df: pd.DataFrame, report_date: str) -> str:
+def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[str] = None, is_missing_data: bool = False) -> Dict[str, Any]:
+    try:
+        from app.services.sharepoint_data_service import get_service as get_excel_service
+        from app.services.scheduler_service import load_scheduler_config
+        
+        logger.info(f"Generating Daily Energy Report (Trigger: {trigger_source})...")
+        
+        sched_config = load_scheduler_config()
+        sp_service = get_excel_service()
+        master_df = sp_service.fetch_sheet_data("master_data")
+        
+        if master_df is None or master_df.empty:
+            return {"status": "Failed", "notes": "Master data is empty"}
+
+        if manual_date:
+            row_df = master_df[master_df['Date'] == manual_date]
+            day_data = row_df.iloc[-1].to_dict() if not row_df.empty else {}
+        else:
+            day_data = master_df.iloc[-1].to_dict()
+            
+        report_date = str(day_data.get("Date", datetime.today().strftime("%Y-%m-%d")))
+
+        # --- Inject Warning if Data is Missing ---
+        if is_missing_data:
+            warning_msg = (
+                "<div style='background-color:#ffebee; padding:15px; border-left:4px solid #f44336; color:#d32f2f; margin:18px 24px 0 24px; font-size:14px;'>"
+                "<b>⚠️ ACTION REQUIRED:</b> The operator did not log today's data by the 10:30 AM deadline. "
+                "The report below only contains data up to yesterday."
+                "</div>"
+            )
+            subject_prefix = "⚠️ ACTION REQUIRED: Missing Data - "
+        else:
+            warning_msg = ""
+            subject_prefix = ""
+
+        # --- Inject HTML EXACTLY as specified ---
+        try:
+            body_html = _build_strict_email_html(master_df, report_date, custom_message=warning_msg)
+        except Exception as e:
+            logger.error(f"HTML generation failed: {e}")
+            body_html = f"<p>Report generated for {report_date}, but HTML formatting failed.</p>"
+
+        try:
+            attachment_bytes = _generate_excel_attachment(master_df)
+            attachment_name = f"Energy_Report_{datetime.today().strftime('%Y%m%d')}.xlsx"
+        except Exception as e:
+            logger.error(f"Attachment generation failed: {e}")
+            attachment_bytes = None
+            attachment_name = None
+
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", 587))
+        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
+        sender_password = os.getenv("EMAIL_PASSWORD", "")
+
+        operator_email = sched_config.get("to", os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com"))
+        cc_emails_str = sched_config.get("cc", "")
+        
+        to_list = [e.strip() for e in operator_email.split(',') if e.strip()]
+        cc_list = [e.strip() for e in cc_emails_str.split(',') if e.strip()]
+        all_recipients = to_list + cc_list
+        
+        # Base subject from config, prepended with warning if applicable
+        base_subject = sched_config.get("subject", f"Daily Energy Report - Noida Campus - {report_date}")
+        subject = f"{subject_prefix}{base_subject}"
+
+        msg = MIMEMultipart("alternative")
+        msg["From"] = email_from
+        msg["To"] = ", ".join(to_list)
+        if cc_list: msg["Cc"] = ", ".join(cc_list)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_html, "html"))
+
+        if attachment_bytes and attachment_name:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment_bytes)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
+            msg.attach(part)
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+            server.starttls()
+            server.login(email_from, sender_password)
+            server.sendmail(email_from, all_recipients, msg.as_string())
+
+        return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
+
+    except Exception as e:
+        logger.error(f"Failed to send daily report: {e}")
+        return {"status": "Failed", "error": str(e)}
+
+
+def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message: str = "") -> str:
     """Builds the exact custom HTML table and layout requested by the user."""
     
     # 1. Clean and Sort the Data
@@ -163,7 +255,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str) -> str:
     table_parts.append('</tbody></table></div>')
     table_html = "\n".join(table_parts)
 
-    custom_message = ""
+    custom_message_html = f'<tr><td style="padding:0;">{custom_message}</td></tr>' if custom_message else ''
 
     # 4. Wrap in the Custom Layout
     return f"""
@@ -179,6 +271,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str) -> str:
                                     <div style="font-size:20px; margin-top:6px; opacity:0.95;">Report Date: {report_date} - Auto-generated by Energy Agent</div>
                                 </td>
                             </tr>
+                            {custom_message_html}
                             <tr>
                                 <td style="padding:18px 24px 8px 24px; color:#223b63; font-weight:700; font-size:20px;">30-Day Data Log</td>
                             </tr>
@@ -187,7 +280,6 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str) -> str:
                                     {table_html}
                                 </td>
                             </tr>
-                            {f'<tr><td style="padding:0 24px 18px 24px; font-size:13px; color:#555;">{custom_message}</td></tr>' if custom_message else ''}
                             <tr>
                                 <td style="background:#f0f0f0; padding:14px 24px; text-align:center; color:#7a7a7a; font-size:13px; border-top:1px solid #dddddd;">Generated by Energy Optimization Agent | Noida Campus | Do not reply</td>
                             </tr>
@@ -219,81 +311,6 @@ def _generate_excel_attachment(df: pd.DataFrame) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 # Mail Dispatchers
 # ──────────────────────────────────────────────────────────────────────────────
-def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[str] = None) -> Dict[str, Any]:
-    try:
-        from app.services.sharepoint_data_service import get_service as get_excel_service
-        from app.services.scheduler_service import load_scheduler_config
-        
-        logger.info(f"Generating Daily Energy Report (Trigger: {trigger_source})...")
-        
-        sched_config = load_scheduler_config()
-        sp_service = get_excel_service()
-        master_df = sp_service.fetch_sheet_data("master_data")
-        
-        if master_df is None or master_df.empty:
-            return {"status": "Failed", "notes": "Master data is empty"}
-
-        if manual_date:
-            row_df = master_df[master_df['Date'] == manual_date]
-            day_data = row_df.iloc[-1].to_dict() if not row_df.empty else {}
-        else:
-            day_data = master_df.iloc[-1].to_dict()
-            
-        report_date = str(day_data.get("Date", datetime.today().strftime("%Y-%m-%d")))
-
-        # --- Inject HTML EXACTLY as specified ---
-        try:
-            body_html = _build_strict_email_html(master_df, report_date)
-        except Exception as e:
-            logger.error(f"HTML generation failed: {e}")
-            body_html = f"<p>Report generated for {report_date}, but HTML formatting failed.</p>"
-
-        try:
-            attachment_bytes = _generate_excel_attachment(master_df)
-            attachment_name = f"Energy_Report_{datetime.today().strftime('%Y%m%d')}.xlsx"
-        except Exception as e:
-            logger.error(f"Attachment generation failed: {e}")
-            attachment_bytes = None
-            attachment_name = None
-
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", 587))
-        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
-
-        operator_email = sched_config.get("to", os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com"))
-        cc_emails_str = sched_config.get("cc", "")
-        
-        to_list = [e.strip() for e in operator_email.split(',') if e.strip()]
-        cc_list = [e.strip() for e in cc_emails_str.split(',') if e.strip()]
-        all_recipients = to_list + cc_list
-        subject = sched_config.get("subject", f"Daily Energy Report - Noida Campus - {report_date}")
-
-        msg = MIMEMultipart("alternative")
-        msg["From"] = email_from
-        msg["To"] = ", ".join(to_list)
-        if cc_list: msg["Cc"] = ", ".join(cc_list)
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_html, "html"))
-
-        if attachment_bytes and attachment_name:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment_bytes)
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
-            msg.attach(part)
-
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, all_recipients, msg.as_string())
-
-        return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
-
-    except Exception as e:
-        logger.error(f"Failed to send daily report: {e}")
-        return {"status": "Failed", "error": str(e)}
-
 def send_operator_reminder() -> Dict[str, Any]:
     try:
         from app.services.scheduler_service import load_scheduler_config
@@ -303,7 +320,18 @@ def send_operator_reminder() -> Dict[str, Any]:
         smtp_port = int(os.getenv("SMTP_PORT", 587))
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
-        operator_email = sched_config.get("to", os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com"))
+        
+        # 1. Fetch TO and CC strings (Prioritize JSON, fallback to .env)
+        # Using 'or' ensures that if the JSON value is an empty string "", it looks at the .env
+        operator_email_str = sched_config.get("to") or os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
+        cc_email_str = sched_config.get("cc") or os.getenv("CC_EMAIL", "")
+        
+        # 2. Convert comma-separated strings into clean lists
+        to_list = [e.strip() for e in operator_email_str.split(',') if e.strip()]
+        cc_list = [e.strip() for e in cc_email_str.split(',') if e.strip()]
+        
+        # Combine them for the final SMTP delivery command
+        all_recipients = to_list + cc_list
         
         subject = "Action Required: Operator Data Missing"
         body = (
@@ -315,15 +343,21 @@ def send_operator_reminder() -> Dict[str, Any]:
 
         msg = MIMEMultipart("alternative")
         msg["From"] = email_from
-        msg["To"] = operator_email
+        
+        # 3. Apply the headers so they show up correctly in the email client
+        msg["To"] = ", ".join(to_list)
+        if cc_list:
+            msg["Cc"] = ", ".join(cc_list)
+            
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(email_from, sender_password)
-            server.sendmail(email_from, [operator_email], msg.as_string())
+            # 4. Send to all recipients (SMTP requires the combined list here)
+            server.sendmail(email_from, all_recipients, msg.as_string())
             
-        return {"status": "Success", "notes": "Operator reminder sent"}
+        return {"status": "Success", "notes": f"Operator reminder sent to {len(all_recipients)} recipients"}
     except Exception as e:
         return {"status": "Failed", "error": str(e)}
