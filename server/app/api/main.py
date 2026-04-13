@@ -1,6 +1,9 @@
 """
 FastAPI application setup and middleware configuration
 """
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
