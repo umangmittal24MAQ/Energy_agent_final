@@ -1,9 +1,9 @@
 {
-    "to": "ishitas@maqsoftware.com",
-    "cc": "prajwal.khadse@maqsoftware.com",
+    "to": "ishitas@maqsoftware.com,krishnav@maqsoftware.com",
+    "cc": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
     "start_time": "09:00",
     "subject": "Daily Energy Report",
-    "auto_start": false,
+    "auto_start": true,
     "include_sections": {
         "summary_kpis": true,
         "unified_table": true,

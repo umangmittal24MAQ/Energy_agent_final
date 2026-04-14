@@ -10,7 +10,6 @@ import {
 import {
   CalendarClock,
   Send,
-  Save,
   Plus,
   X,
   Clock,
@@ -19,7 +18,6 @@ import {
   StopCircle,
   CheckCircle2,
   History,
-  FileText,
   Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -67,6 +65,15 @@ export default function Scheduler() {
   const [sendHistory, setSendHistory] = useState([]);
   const [isSchedulerRunning, setIsSchedulerRunning] = useState(false);
 
+  const toRecipients = useMemo(
+    () => recipients.map((r) => r.trim()).filter(Boolean),
+    [recipients],
+  );
+  const ccRecipients = useMemo(
+    () => cc.map((r) => r.trim()).filter(Boolean),
+    [cc],
+  );
+
   useEffect(() => {
     async function loadScheduler() {
       try {
@@ -99,9 +106,9 @@ export default function Scheduler() {
           setStartTime(config.send_time);
         }
 
-        if (status?.next_run) {
-          setNextRunLabel(formatDateTime(status.next_run));
-        }
+        setNextRunLabel(
+          status?.next_run ? formatDateTime(status.next_run) : "—",
+        );
         setIsSchedulerRunning(status?.status === "running");
       } catch {
         // Keep form defaults if scheduler config/status fetch fails.
@@ -109,6 +116,22 @@ export default function Scheduler() {
     }
 
     loadScheduler();
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try {
+        const status = await fetchSchedulerStatus();
+        setIsSchedulerRunning(status?.status === "running");
+        setNextRunLabel(
+          status?.next_run ? formatDateTime(status.next_run) : "—",
+        );
+      } catch {
+        // Keep current status display if polling fails temporarily.
+      }
+    }, 30000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   function addRecipient() {
@@ -173,10 +196,6 @@ export default function Scheduler() {
     }
   }
 
-  async function handleSaveConfiguration() {
-    await persistConfiguration({ showSuccess: true });
-  }
-
   async function handleSendNow() {
     const toList = recipients.filter(Boolean);
     if (toList.length === 0) return;
@@ -188,7 +207,7 @@ export default function Scheduler() {
     try {
       const saved = await persistConfiguration({
         showSuccess: false,
-        autoStartOverride: isSchedulerRunning,
+        autoStartOverride: true,
       });
       if (!saved) {
         return;
@@ -422,32 +441,17 @@ export default function Scheduler() {
                 </div>
               </div>
 
-              <div className="grid gap-3 lg:grid-cols-3">
-                <div className="lg:col-span-2 space-y-2">
-                  <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-                    <FileText className="w-3.5 h-3.5 text-slate-400" />
-                    Subject
-                  </label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors placeholder:text-slate-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    Start Time
-                  </label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors text-slate-700"
-                  />
-                </div>
+              <div className="space-y-2 max-w-sm">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  Start Time
+                </label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors text-slate-700"
+                />
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -461,22 +465,14 @@ export default function Scheduler() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 [&>button]:px-3 [&>button]:py-2">
-                  <button
-                    onClick={handleSaveConfiguration}
-                    disabled={saving || scheduling || sending}
-                    className="inline-flex items-center justify-center gap-2 w-full border border-blue-200 text-blue-700 text-sm font-medium rounded-md hover:bg-blue-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Save className="w-4 h-4" />
-                    Save
-                  </button>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 [&>button]:px-3 [&>button]:py-2">
                   <button
                     onClick={handleSchedule}
-                    disabled={scheduling || saving}
+                    disabled={scheduling || saving || sending}
                     className="inline-flex items-center justify-center gap-2 w-full bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <CalendarClock className="w-4 h-4" />
-                    Schedule
+                    Save & Schedule
                   </button>
                   <button
                     onClick={handleStopScheduler}
@@ -529,6 +525,35 @@ export default function Scheduler() {
                 </button>
               </div>
             )}
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">
+                Schedule Summary
+              </h3>
+              <div className="space-y-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[11px] text-slate-500">
+                    Next Scheduled Mail
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {isSchedulerRunning ? nextRunLabel : "Scheduler is stopped"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[11px] text-slate-500">Recipients (To)</p>
+                  <p className="text-xs font-medium text-slate-700 wrap-break-word">
+                    {toRecipients.length
+                      ? toRecipients.join(", ")
+                      : "No recipients configured"}
+                  </p>
+                  {ccRecipients.length > 0 && (
+                    <p className="text-xs text-slate-500 wrap-break-word mt-1">
+                      CC: {ccRecipients.join(", ")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">

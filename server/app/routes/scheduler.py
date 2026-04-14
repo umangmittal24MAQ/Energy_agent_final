@@ -93,6 +93,8 @@ async def update_scheduler_config(settings: EmailSettings):
     try:
         existing = load_scheduler_config()
         new_config = {**existing, **settings.model_dump(exclude_none=True)}
+        # Keep scheduler always-on for config-only updates.
+        new_config["auto_start"] = True
 
         for deprecated_key in [
             "send_time",
@@ -109,10 +111,7 @@ async def update_scheduler_config(settings: EmailSettings):
             
         logger.info(f"Frontend updated email settings: To={settings.to}, CC={settings.cc}")
 
-        if new_config.get("auto_start", False):
-            start_scheduler(new_config.get("start_time", "09:00"))
-        else:
-            stop_scheduler()
+        start_scheduler(new_config.get("start_time", "09:00"))
         
         return {
             "status": "success", 
