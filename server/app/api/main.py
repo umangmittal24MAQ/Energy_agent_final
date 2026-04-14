@@ -9,6 +9,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from pathlib import Path
+from dotenv import load_dotenv
 
 from app.core.config import get_settings
 from app.core.logger import setup_logging, get_logger

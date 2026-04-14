@@ -230,7 +230,7 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     
     # 7. Build the Master Row
     master_row = {
-        "Date": solar_date,                      
+        "Date": operator_date,                      
         "Day":  consumption_dt.strftime("%A"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
@@ -257,7 +257,9 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     df_master = download_excel("Master-data.xlsx")
     
     df_master['Date_Str'] = _robust_parse_date(df_master['Date'])
-    df_master = df_master[df_master['Date_Str'] != solar_date].drop(columns=['Date_Str'])
+    
+    # FIX: The deduplication check must match the date we are inserting!
+    df_master = df_master[df_master['Date_Str'] != operator_date].drop(columns=['Date_Str'])
     
     new_df = pd.DataFrame([master_row])
     df_master = pd.concat([df_master, new_df], ignore_index=True)

@@ -1,19 +1,18 @@
 {
-  "to": "ojasu@maqsoftware.com",
-  "cc": "vimalv@maqsoftware.com,ramc@maqsoftware.com,amrishs@maqsoftware.com,naveenk@maqsoftware.com,prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com,krishnav@maqsoftware.com,ishitas@maqsoftware.com",
-  "send_time": "10:30",
-  "subject": "Review Noida Daily Energy Optimization \u2014 {date}",
-  "custom_message": "",
-  "auto_start": true,
-  "include_sections": {
-    "summary_kpis": true,
-    "unified_table": true,
-    "grid_summary": true,
-    "solar_summary": true,
-    "diesel_summary": true,
-    "inverter_status": true,
-    "raw_data": false
-  },
-  "uploaded_template_path": null
+    "to": "ojasu@maqsoftware.com",
+    "cc": "vimalv@maqsoftware.com,ramc@maqsoftware.com,amrishs@maqsoftware.com,naveenk@maqsoftware.com,prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com,krishnav@maqsoftware.com,ishitas@maqsoftware.com",
+    "send_time": "09:22",
+    "subject": "Review Noida Daily Energy Optimization \u2014 {date}",
+    "custom_message": "",
+    "auto_start": true,
+    "include_sections": {
+        "summary_kpis": true,
+        "unified_table": true,
+        "grid_summary": true,
+        "solar_summary": true,
+        "diesel_summary": true,
+        "inverter_status": true,
+        "raw_data": false
+    },
+    "uploaded_template_path": null
 }
-

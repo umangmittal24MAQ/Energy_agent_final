@@ -34,7 +34,7 @@ logger = logging.getLogger("app.services.scheduler_service")
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
     # Azure Path: Looks at the persistent storage
-    BASE_DIR = Path("/home/site/wwwroot/energy-dashboard/energy-dashboard")
+    BASE_DIR = Path("/home/site/wwwroot/energy-dashboard")
 else:
     # Local Path: Looks at the folder outside the 'app' directory
     BASE_DIR = Path(__file__).parent.parent.parent / "energy-dashboard"
@@ -275,44 +275,85 @@ def _run_data_refresh() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # Time-Based Jobs
 # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Time-Based Jobs
+# ──────────────────────────────────────────────────────────────────────────────
 def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, Any]:
-    """The 10:30 AM Main Entry Point"""
+    """The 10:30 AM Main Entry Point (The Deadline)"""
     from app.core.logger import logger
-    logger.info(f"Triggering daily report automation via {trigger_source}")
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     from app.services.email_service import send_daily_report
     
+    IST = ZoneInfo("Asia/Kolkata")
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+
+    # 1. Did Ojas upload early? Check the tracker.
+    if _daily_report_tracker.get(today_str, False):
+        logger.info("10:30 AM Deadline reached, but the report was already sent early today. Skipping!")
+        return {"status": "Skipped", "notes": "Report already sent today"}
+
+    logger.info(f"Triggering daily report automation via {trigger_source}")
+    
     if check_grid_diesel_entry_exists():
-        logger.info("Operator data found. Running Master Data Engine before sending report...")
+        logger.info("Operator data found at 10:30 AM. Running Master Engine before sending report...")
         engine_result = _run_master_data_engine()
         
         if engine_result["status"] == "Success":
-            # Send the normal report
-            return send_daily_report(trigger_source=trigger_source, is_missing_data=False)
+            result = send_daily_report(trigger_source=trigger_source, is_missing_data=False)
+            _daily_report_tracker[today_str] = True  # Lock the tracker
+            return result
         else:
             return {"status": "Error", "notes": "Master Engine Failed"}
     else:
         # Operator forgot to submit data by 10:30 AM. 
-        # Skip Master Engine and send the report with the warning flag enabled.
         logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
-        return send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
+        result = send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
+        _daily_report_tracker[today_str] = True  # Lock the tracker
+        return result
 
 def _run_operator_reminder_cycle():
-    """Triggered at 9:00, 9:30, 10:00 to verify data presence before the deadline."""
+    """Triggered at 9:00, 9:30, 10:00 to verify data or send early report."""
     from app.core.logger import logger
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     
+    IST = ZoneInfo("Asia/Kolkata")
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+
+    # 1. If the report was already sent earlier this morning, stay quiet
+    if _daily_report_tracker.get(today_str, False):
+        logger.info("Report already sent today. Skipping reminder cycle.")
+        return
+        
+    # 2. Check if the data is there
     if not check_grid_diesel_entry_exists():
         logger.info("Grid data missing! Attempting to send reminder...")
         from app.services.email_service import send_operator_reminder
         
-        # Capture the result so we can log it properly for Azure
         result = send_operator_reminder()
-        
         if result.get("status") == "Success":
             logger.info(f"Reminder Email sent successfully: {result.get('notes')}")
         else:
             logger.error(f"Reminder Email FAILED: {result.get('error') or result.get('notes')}")
+            
     else:
-        logger.info("Grid data is already present. Skipping reminder.")
+        # 3. THE UPGRADE: Data is here early! Bypass 10:30 AM and send NOW.
+        logger.info("Grid data is PRESENT early! Bypassing 10:30 AM deadline and sending Report NOW.")
+        
+        engine_result = _run_master_data_engine()
+        if engine_result["status"] == "Success":
+            from app.services.email_service import send_daily_report
+            send_result = send_daily_report(trigger_source="early_submission", is_missing_data=False)
+            
+            if send_result.get("status") == "Success":
+                # Lock the tracker so subsequent reminders and 10:30 AM are skipped
+                _daily_report_tracker[today_str] = True
+                logger.info("✅ Early report sent successfully. Tracker locked for the day.")
+            else:
+                logger.error(f"Failed to send early report: {send_result.get('error')}")
+        else:
+            logger.error("Master Engine Failed during early submission.")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Scheduler Initialization
