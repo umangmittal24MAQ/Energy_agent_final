@@ -228,11 +228,15 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     
     consumption_dt = pd.to_datetime(solar_date) 
     
+    # 6.5 Extract EXACT Issues Column (Bypass Fuzzy Matching)
+    raw_issues = grid_today.get("Issues", "No issues")
+    # Prevent Pandas from printing "nan" if the Excel cell is empty
+    final_issues = "No issues" if pd.isna(raw_issues) or str(raw_issues).strip() == "" else str(raw_issues)
+
     # 7. Build the Master Row
     master_row = {
         "Date": operator_date,                      
         "Day":  consumption_dt.strftime("%A"),
-        "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
@@ -244,7 +248,7 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
         "Diesel consumed": _get_fuzzy(grid_today, "diesel", "0"),
         "Water treated through STP": _get_fuzzy(grid_today, "stp", "0"),
         "Water treated through WTP": _get_fuzzy(grid_today, "wtp", "0"),
-        "Issues": _get_fuzzy(grid_today, "issues", "No issues"),
+        "Issues": final_issues,                                     # <--- STRICT EXACT MATCH
         "Inverter_1": _get_fuzzy(grid_today, "inv_1", ""),
         "Inverter_2": _get_fuzzy(grid_today, "inv_2", ""),
         "Inverter_3": _get_fuzzy(grid_today, "inv_3", ""),
@@ -258,15 +262,19 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     
     df_master['Date_Str'] = _robust_parse_date(df_master['Date'])
     
-    # FIX: The deduplication check must match the date we are inserting!
+    # The deduplication check
     df_master = df_master[df_master['Date_Str'] != operator_date].drop(columns=['Date_Str'])
     
     new_df = pd.DataFrame([master_row])
     df_master = pd.concat([df_master, new_df], ignore_index=True)
     
+    # 🚀 THE FIX: Force the entire Date column into strict YYYY-MM-DD strings, stripping the 00:00:00
+    df_master['Date'] = _robust_parse_date(df_master['Date'])
+    
     logger.info("Uploading updated Master-data.xlsx to SharePoint...")
     upload_excel("Master-data.xlsx", df_master)
     logger.info("✅ Master data synchronization SUCCESS!")
+
     
 # REPLACE WITH THIS
 if __name__ == "__main__":

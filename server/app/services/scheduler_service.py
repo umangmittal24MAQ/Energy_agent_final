@@ -443,20 +443,20 @@ def initialize_scheduler_from_config() -> None:
         
     _run_data_refresh()
     
-    # 1. Start Scraper Clock (Runs every 30 mins)
+   # 1. Start Scraper Clock (Runs every 30 mins between 06:00 and 19:30)
     _scheduler.add_job(
         _run_solar_scraper,
-        trigger=IntervalTrigger(minutes=30, timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="suryalogix_scraper_job",
         replace_existing=True,
         max_instances=1,
         coalesce=True    
     )
     
-    # 2. Start Data Refresh Clock (Updates API Cache every 30 mins)
+    # 2. Start Data Refresh Clock (Updates API Cache every 30 mins between 06:00 and 19:30)
     _scheduler.add_job(
         _run_data_refresh,
-        trigger=IntervalTrigger(minutes=30, timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="data_refresh_interval",
         replace_existing=True,
         max_instances=1,
