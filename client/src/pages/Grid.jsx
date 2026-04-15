@@ -8,7 +8,6 @@ import { useKpis, useUnifiedData } from "../lib/hooks";
 import KpiCard from "../components/KpiCard";
 import {
   PlugZap,
-  IndianRupee,
   Zap,
   TrendingUp,
   AlertCircle,
@@ -26,18 +25,57 @@ import {
   Legend,
 } from "recharts";
 
-function formatDateTick(dateStr) {
+function formatLongDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatDateTick(dateStr) {
+  return formatLongDate(dateStr);
 }
 
 function formatNumber(v) {
   if (v == null) return "—";
-  return typeof v === "number"
-    ? v.toLocaleString("en-IN", { maximumFractionDigits: 1 })
-    : v;
+  const numeric = typeof v === "number" ? v : Number(v);
+  if (Number.isFinite(numeric)) {
+    return Math.ceil(numeric).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  }
+  return v;
+}
+
+function parseNumeric(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value);
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  const match = text.match(/[-+]?\d*\.?\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function getLocalDateKey(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeRowDateKey(value) {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return getLocalDateKey(d);
 }
 
 const PAGE_SIZE = 15;
@@ -51,6 +89,61 @@ export default function Grid() {
   } = useUnifiedData();
 
   const dateRange = rawData?.date_range || null;
+  const sourceRows = rawData?.data || [];
+
+  const metricValues = useMemo(() => {
+    if (sourceRows.length === 0) {
+      return {
+        gridUnits: 0,
+        gridContribution: "0",
+      };
+    }
+
+    const todayKey = getLocalDateKey(new Date());
+    const rowsWithKey = sourceRows.map((row) => ({
+      row,
+      dateKey: normalizeRowDateKey(row["Date"]),
+    }));
+
+    const todayRows = rowsWithKey
+      .filter((item) => item.dateKey === todayKey)
+      .map((item) => item.row);
+
+    const latestDateKey = rowsWithKey
+      .map((item) => item.dateKey)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+
+    const fallbackRows = rowsWithKey
+      .filter((item) => item.dateKey === latestDateKey)
+      .map((item) => item.row);
+
+    const selectedRows = todayRows.length > 0 ? todayRows : fallbackRows;
+
+    const gridUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Grid Units Consumed (KWh)"]),
+      0,
+    );
+    const solarUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Solar Units Consumed(KWh)"]),
+      0,
+    );
+    const dieselUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Diesel consumed"]),
+      0,
+    );
+
+    const denominator = gridUnitsRaw + solarUnitsRaw + dieselUnitsRaw;
+    const gridContribution =
+      denominator > 0 ? ((gridUnitsRaw / denominator) * 100).toFixed(2) : "0";
+
+    return {
+      gridUnits: Math.ceil(gridUnitsRaw),
+      gridContribution,
+    };
+  }, [sourceRows]);
+
   const chartData = useMemo(
     () =>
       (rawData?.data || []).map((row) => ({
@@ -65,11 +158,6 @@ export default function Grid() {
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
-
-  const gridShare =
-    kpis?.total_grid_kwh && kpis?.total_energy_kwh
-      ? ((kpis.total_grid_kwh / kpis.total_energy_kwh) * 100).toFixed(1)
-      : null;
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -99,20 +187,10 @@ export default function Grid() {
   const error = kpisError || dataError;
 
   const TABLE_COLS = [
-    { key: "date", label: "Date", format: (v) => v },
+    { key: "date", label: "Date", format: formatLongDate },
     {
       key: "grid",
       label: "Grid Units Consumed (KWh)",
-      format: formatNumber,
-    },
-    {
-      key: "total",
-      label: "Total Units Consumed (KWh)",
-      format: formatNumber,
-    },
-    {
-      key: "cost",
-      label: "Total Units Consumed in INR",
       format: formatNumber,
     },
   ];
@@ -133,7 +211,8 @@ export default function Grid() {
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
-            {dateRange.min_date} — {dateRange.max_date}
+            {formatLongDate(dateRange.min_date)} —{" "}
+            {formatLongDate(dateRange.max_date)}
           </div>
         )}
       </div>
@@ -146,31 +225,23 @@ export default function Grid() {
       )}
 
       {/* Grid KPIs */}
-      <div className="grid grid-cols-3 gap-4 shrink-0">
-        {kpisLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
+      <div className="grid grid-cols-2 gap-4 shrink-0">
+        {kpisLoading || dataLoading ? (
+          Array.from({ length: 2 }).map((_, i) => <CardSkeleton key={i} />)
         ) : (
           <>
             <KpiCard
               label="Grid Units Consumed"
-              value={kpis?.total_grid_kwh}
+              value={metricValues.gridUnits}
               unit="KWh"
               icon={PlugZap}
               accent="text-slate-700"
               iconBg="bg-slate-100"
             />
             <KpiCard
-              label="Total Cost (INR)"
-              value={kpis?.total_cost_inr}
-              unit="INR"
-              icon={IndianRupee}
-              accent="text-slate-700"
-              iconBg="bg-slate-100"
-            />
-            <KpiCard
-              label="Grid Share"
-              value={gridShare}
-              unit="%"
+              label="Grid Contribution"
+              value={`${metricValues.gridContribution}%`}
+              unit=""
               icon={Zap}
               accent="text-blue-600"
               iconBg="bg-blue-50"
@@ -194,7 +265,7 @@ export default function Grid() {
               </div>
               {dateRange && (
                 <span className="text-xs text-slate-400">
-                  as of {dateRange.max_date}
+                  as of {formatLongDate(dateRange.max_date)}
                 </span>
               )}
             </div>
@@ -230,6 +301,7 @@ export default function Grid() {
                     }}
                   />
                   <Legend
+                    verticalAlign="top"
                     wrapperStyle={{
                       fontSize: 12,
                       paddingTop: 8,
@@ -251,7 +323,7 @@ export default function Grid() {
 
         {/* Grid Data Table */}
         {dataLoading ? (
-          <TableSkeleton rows={4} cols={4} />
+          <TableSkeleton rows={4} cols={2} />
         ) : (
           <section className="bg-white rounded-lg border border-slate-200">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">

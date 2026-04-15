@@ -1,12 +1,14 @@
 import os
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 
 from app.core.logger import logger
 from app.services.scheduler_service import (
+    SCHEDULER_LOG_FILE,
     get_scheduler_status,
     initialize_scheduler_from_config,
     load_scheduler_config,
@@ -128,6 +130,38 @@ async def update_scheduler_config(settings: EmailSettings):
 async def scheduler_status() -> Dict[str, Any]:
     """Returns active scheduler status and next run time."""
     return get_scheduler_status()
+
+
+@router.get("/scheduler/history")
+async def scheduler_history() -> Dict[str, Any]:
+    """Returns scheduler send history entries from scheduler_log.json (read-only)."""
+    try:
+        if not SCHEDULER_LOG_FILE.exists():
+            return {"entries": []}
+
+        with open(SCHEDULER_LOG_FILE, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+
+        if not isinstance(payload, list):
+            return {"entries": []}
+
+        def _timestamp_for_sort(entry: Dict[str, Any]) -> float:
+            raw = str(entry.get("timestamp", "")).strip()
+            if not raw:
+                return 0.0
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.timestamp()
+            except ValueError:
+                return 0.0
+
+        entries = sorted(payload, key=_timestamp_for_sort, reverse=True)
+        return {"entries": entries}
+    except Exception as e:
+        logger.error(f"Failed to read scheduler history log: {e}")
+        raise HTTPException(status_code=500, detail="Could not read scheduler history.")
 
 
 @router.post("/scheduler/start")

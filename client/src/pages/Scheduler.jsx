@@ -4,8 +4,7 @@ import {
   fetchSchedulerConfig,
   updateSchedulerConfig,
   fetchSchedulerStatus,
-  startScheduler,
-  stopSchedulerApi,
+  fetchSchedulerHistory,
 } from "../lib/api";
 import {
   CalendarClock,
@@ -31,22 +30,72 @@ function getDefaultTime() {
 function formatDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
     year: "numeric",
+    month: "long",
+    day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
   });
 }
 
+function toDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function isSendEvent(entry) {
+  if (!entry || typeof entry !== "object") return false;
+  const status = String(entry.status || "").toLowerCase();
+  if (status !== "success" && status !== "failed") return false;
+  return Boolean(
+    entry.subject || entry.recipients || entry.kind === "daily_report",
+  );
+}
+
+function computeNextSchedulerSlot(
+  startTimeValue,
+  intervalMinutes = 30,
+  nowDate = new Date(),
+) {
+  const match = String(startTimeValue || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+
+  const startHour = Number(match[1]);
+  const startMinute = Number(match[2]);
+  const safeInterval =
+    Number.isFinite(intervalMinutes) && intervalMinutes > 0
+      ? intervalMinutes
+      : 30;
+
+  const slotsPerDay = 4;
+  const baseToday = new Date(nowDate);
+  baseToday.setHours(startHour, startMinute, 0, 0);
+
+  const candidates = [];
+  for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
+    const dayBase = new Date(baseToday);
+    dayBase.setDate(baseToday.getDate() + dayOffset);
+
+    for (let i = 0; i < slotsPerDay; i += 1) {
+      candidates.push(
+        new Date(dayBase.getTime() + i * safeInterval * 60 * 1000),
+      );
+    }
+  }
+
+  return candidates.find((slot) => slot.getTime() > nowDate.getTime()) || null;
+}
+
 export default function Scheduler() {
   const today = useMemo(
     () =>
-      new Date().toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
+      new Date().toLocaleDateString("en-US", {
         year: "numeric",
+        month: "long",
+        day: "numeric",
       }),
     [],
   );
@@ -65,9 +114,11 @@ export default function Scheduler() {
   const [saving, setSaving] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [sendHistory, setSendHistory] = useState([]);
-  const [isSchedulerRunning, setIsSchedulerRunning] = useState(false);
+  const [isSchedulerRunning, setIsSchedulerRunning] = useState(true);
+  const [configuredIntervalMinutes, setConfiguredIntervalMinutes] =
+    useState(30);
+  const [nowTick, setNowTick] = useState(Date.now());
 
-  // Memoized lists for clean UI display at the top
   const toRecipients = useMemo(
     () => recipients.map((r) => r.trim()).filter(Boolean),
     [recipients],
@@ -77,12 +128,51 @@ export default function Scheduler() {
     [cc],
   );
 
+  const nextScheduledMailLabel = useMemo(() => {
+    const slot = computeNextSchedulerSlot(
+      startTime,
+      configuredIntervalMinutes,
+      new Date(nowTick),
+    );
+    if (!slot) return "—";
+    return formatDateTime(slot.toISOString());
+  }, [startTime, configuredIntervalMinutes, nowTick]);
+
+  const totalSendsCount = useMemo(
+    () => sendHistory.filter(isSendEvent).length,
+    [sendHistory],
+  );
+
+  async function refreshSchedulerStatus() {
+    const status = await fetchSchedulerStatus();
+    setIsSchedulerRunning(true);
+    setNextRunLabel(status?.next_run ? formatDateTime(status.next_run) : "—");
+    return status;
+  }
+
+  async function refreshSchedulerHistory() {
+    const historyPayload = await fetchSchedulerHistory();
+    const entries = Array.isArray(historyPayload?.entries)
+      ? historyPayload.entries
+      : [];
+
+    const sortedEntries = [...entries].sort((a, b) => {
+      const aTs = toDate(a?.timestamp)?.getTime() ?? 0;
+      const bTs = toDate(b?.timestamp)?.getTime() ?? 0;
+      return bTs - aTs;
+    });
+
+    setSendHistory(sortedEntries);
+    return sortedEntries;
+  }
+
   useEffect(() => {
     async function loadScheduler() {
       try {
-        const [config, status] = await Promise.all([
+        const [config] = await Promise.all([
           fetchSchedulerConfig(),
-          fetchSchedulerStatus(),
+          refreshSchedulerStatus(),
+          refreshSchedulerHistory(),
         ]);
 
         if (config?.to) {
@@ -109,10 +199,13 @@ export default function Scheduler() {
           setStartTime(config.send_time);
         }
 
-        setNextRunLabel(
-          status?.next_run ? formatDateTime(status.next_run) : "—",
-        );
-        setIsSchedulerRunning(status?.status === "running");
+        const explicitInterval = Number(config?.reminder_interval_minutes);
+        if (Number.isFinite(explicitInterval) && explicitInterval > 0) {
+          setConfiguredIntervalMinutes(explicitInterval);
+        }
+
+        setIsSchedulerRunning(true);
+        setNowTick(Date.now());
       } catch {
         // Keep form defaults if scheduler config/status fetch fails.
       }
@@ -125,11 +218,11 @@ export default function Scheduler() {
   useEffect(() => {
     const intervalId = setInterval(async () => {
       try {
-        const status = await fetchSchedulerStatus();
-        setIsSchedulerRunning(status?.status === "running");
-        setNextRunLabel(
-          status?.next_run ? formatDateTime(status.next_run) : "—",
-        );
+        await Promise.all([
+          refreshSchedulerStatus(),
+          refreshSchedulerHistory(),
+        ]);
+        setNowTick(Date.now());
       } catch {
         // Keep current status display if polling fails temporarily.
       }
@@ -184,7 +277,7 @@ export default function Scheduler() {
     try {
       await updateSchedulerConfig(buildConfigPayload(autoStartOverride));
       if (autoStartOverride != null) {
-        setIsSchedulerRunning(Boolean(autoStartOverride));
+        setIsSchedulerRunning(true);
       }
       if (showSuccess) {
         setSuccessMsg("Configuration saved successfully.");
@@ -202,16 +295,18 @@ export default function Scheduler() {
 
   // SAVE: Forces auto_start to TRUE
   async function handleSaveConfiguration() {
-    const saved = await persistConfiguration({ showSuccess: true, autoStartOverride: true });
+    const saved = await persistConfiguration({
+      showSuccess: true,
+      autoStartOverride: true,
+    });
     if (saved) {
       // Refresh the clock to show the new Next Run time
-      const status = await fetchSchedulerStatus();
-      setIsSchedulerRunning(status?.status === "running");
-      setNextRunLabel(status?.next_run ? formatDateTime(status.next_run) : "—");
+      await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
+      setNowTick(Date.now());
     }
   }
 
-  // SEND NOW: Forces auto_start to FALSE
+  // SEND NOW: immediate one-off send without changing scheduler state
   async function handleSendNow() {
     const toList = recipients.filter(Boolean);
     if (toList.length === 0) return;
@@ -221,41 +316,18 @@ export default function Scheduler() {
     setErrorMsg(null);
 
     try {
-      const saved = await persistConfiguration({
-        showSuccess: false,
-        autoStartOverride: false, // STOPS the clock
-      });
-      if (!saved) {
-        return;
-      }
-      
-      setNextRunLabel("—"); // Clear the clock label immediately
-
       await sendTestEmail();
 
-      setSendHistory((prev) => [
-        {
-          id: Date.now(),
-          to: toList[0],
-          subject,
-          sentAt: new Date().toISOString(),
-          status: "delivered",
-        },
-        ...prev,
-      ]);
+      await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
+      setNowTick(Date.now());
+
       setSuccessMsg("Email sent successfully to " + toList.join(", "));
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
-      setSendHistory((prev) => [
-        {
-          id: Date.now(),
-          to: toList[0],
-          subject,
-          sentAt: new Date().toISOString(),
-          status: "failed",
-        },
-        ...prev,
-      ]);
+      await Promise.all([
+        refreshSchedulerStatus(),
+        refreshSchedulerHistory(),
+      ]).catch(() => {});
       setErrorMsg(err.message || "Failed to send email");
       setTimeout(() => setErrorMsg(null), 5000);
     } finally {
@@ -269,10 +341,10 @@ export default function Scheduler() {
     setErrorMsg(null);
 
     try {
-      const stopped = await stopSchedulerApi();
-      if (!stopped?.next_run) setNextRunLabel("—");
-      setIsSchedulerRunning(false);
-      setSuccessMsg("Scheduler stopped successfully.");
+      await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
+      setNowTick(Date.now());
+      setIsSchedulerRunning(true);
+      setSuccessMsg("Scheduler remains running.");
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
       setErrorMsg(err.message || "Failed to stop scheduler");
@@ -284,7 +356,6 @@ export default function Scheduler() {
 
   return (
     <div className="h-[calc(100vh-2rem)] rounded-2xl border border-slate-200 bg-slate-100 p-4 flex flex-col overflow-hidden">
-      
       {/* --- TOP SUMMARY HEADER --- */}
       <div className="shrink-0 rounded-xl border border-slate-200 bg-white px-5 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -316,26 +387,40 @@ export default function Scheduler() {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
           <div>
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" /> Next Scheduled Run
+              <Clock className="w-3.5 h-3.5" /> Next Scheduled Mail
             </p>
             <p className="text-sm font-medium text-slate-800">
-              {isSchedulerRunning ? nextRunLabel : "Currently Stopped"}
+              {nextScheduledMailLabel !== "—"
+                ? nextScheduledMailLabel
+                : isSchedulerRunning
+                  ? nextRunLabel
+                  : "—"}
             </p>
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Users className="w-3.5 h-3.5" /> Primary Recipients (To)
+              <Users className="w-3.5 h-3.5" /> Recipients (To):
             </p>
-            <p className="text-sm font-medium text-slate-800 truncate" title={toRecipients.join(", ")}>
-              {toRecipients.length ? toRecipients.join(", ") : "None configured"}
+            <p
+              className="text-sm font-medium text-slate-800 truncate"
+              title={toRecipients.join(", ")}
+            >
+              {toRecipients.length
+                ? toRecipients.join(", ")
+                : "None configured"}
             </p>
           </div>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5" /> Carbon Copy (CC)
+              <Mail className="w-3.5 h-3.5" /> CC:
             </p>
-            <p className="text-sm font-medium text-slate-800 truncate" title={ccRecipients.join(", ")}>
-              {ccRecipients.length ? ccRecipients.join(", ") : "None configured"}
+            <p
+              className="text-sm font-medium text-slate-800 truncate"
+              title={ccRecipients.join(", ")}
+            >
+              {ccRecipients.length
+                ? ccRecipients.join(", ")
+                : "None configured"}
             </p>
           </div>
         </div>
@@ -343,7 +428,6 @@ export default function Scheduler() {
 
       <div className="mt-4 flex-1 overflow-hidden">
         <div className="grid h-full grid-cols-1 gap-4 xl:grid-cols-12">
-          
           {/* --- LEFT PANEL: CONFIGURATION --- */}
           <div className="xl:col-span-8 min-h-0">
             <div className="h-full rounded-xl border border-slate-200 bg-white p-4 overflow-y-auto space-y-4">
@@ -352,9 +436,6 @@ export default function Scheduler() {
                   <Mail className="w-4 h-4 text-blue-600" />
                   Email Configuration
                 </h2>
-                <span className="text-xs text-slate-400">
-                  Operational profile
-                </span>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
@@ -461,8 +542,8 @@ export default function Scheduler() {
                   <input
                     type="text"
                     value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors placeholder:text-slate-300"
+                    disabled
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-[#f0f0f0] text-[#888888] cursor-not-allowed"
                   />
                 </div>
 
@@ -501,6 +582,7 @@ export default function Scheduler() {
                   <button
                     onClick={handleStopScheduler}
                     disabled={scheduling || saving || sending}
+                    title={`Stop Scheduler — Today: ${today}`}
                     className="inline-flex items-center justify-center gap-2 w-full border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <StopCircle className="w-4 h-4" />
@@ -520,7 +602,15 @@ export default function Scheduler() {
                   </button>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-3 text-center">
-                  * <span className="font-medium text-slate-600">Save & Schedule</span> arms the system automatically. <span className="font-medium text-slate-600">Send Test Now</span> will temporarily stop the background clock.
+                  *{" "}
+                  <span className="font-medium text-slate-600">
+                    Save & Schedule
+                  </span>{" "}
+                  arms the system automatically.{" "}
+                  <span className="font-medium text-slate-600">
+                    Send Test Now
+                  </span>{" "}
+                  sends one immediate email without changing scheduler state.
                 </p>
               </div>
             </div>
@@ -562,7 +652,7 @@ export default function Scheduler() {
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
                   <p className="text-[11px] text-slate-500">Total Sends</p>
                   <p className="text-sm font-semibold text-slate-800">
-                    {sendHistory.length}
+                    {totalSendsCount}
                   </p>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
@@ -585,35 +675,68 @@ export default function Scheduler() {
               {sendHistory.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center p-4">
                   <p className="text-xs text-slate-400 text-center">
-                    No emails sent yet in this session.
+                    No send history available.
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 overflow-y-auto">
-                  {sendHistory.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="px-4 py-3 flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm text-slate-700 truncate font-medium">
-                          {entry.subject}
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                          {entry.to} · {formatDateTime(entry.sentAt)}
-                        </p>
-                      </div>
-                      <span
-                        className={`text-[10px] uppercase font-bold tracking-wide px-2 py-1 rounded-full shrink-0 ${
-                          entry.status === "delivered"
-                            ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                            : "bg-red-50 text-red-500 border border-red-100"
-                        }`}
-                      >
-                        {entry.status}
-                      </span>
-                    </div>
-                  ))}
+                <div className="overflow-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2 font-semibold text-slate-500">
+                          Date &amp; Time
+                        </th>
+                        <th className="px-3 py-2 font-semibold text-slate-500">
+                          Status
+                        </th>
+                        <th className="px-3 py-2 font-semibold text-slate-500">
+                          Recipients (To)
+                        </th>
+                        <th className="px-3 py-2 font-semibold text-slate-500">
+                          Subject
+                        </th>
+                        <th className="px-3 py-2 font-semibold text-slate-500">
+                          Notes
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sendHistory.map((entry, idx) => (
+                        <tr
+                          key={`${entry.timestamp || "no-ts"}-${idx}`}
+                          className="border-b border-slate-100 align-top"
+                        >
+                          <td className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                            {formatDateTime(entry.timestamp)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`text-[10px] uppercase font-bold tracking-wide px-2 py-1 rounded-full inline-flex ${
+                                String(entry.status || "").toLowerCase() ===
+                                "success"
+                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                  : String(entry.status || "").toLowerCase() ===
+                                      "failed"
+                                    ? "bg-red-50 text-red-500 border border-red-100"
+                                    : "bg-slate-50 text-slate-600 border border-slate-200"
+                              }`}
+                            >
+                              {entry.status || "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-700 break-all">
+                            {entry.recipients || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-700 break-all">
+                            {entry.subject || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-slate-600 wrap-break-word">
+                            {entry.notes || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

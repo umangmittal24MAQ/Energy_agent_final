@@ -13,7 +13,6 @@ import {
   AlertCircle,
   Calendar,
   ArrowUpDown,
-  Gauge,
 } from "lucide-react";
 import {
   AreaChart,
@@ -26,11 +25,19 @@ import {
   Legend,
 } from "recharts";
 
-function formatDateTick(dateStr) {
+function formatLongDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatDateTick(dateStr) {
+  return formatLongDate(dateStr);
 }
 
 function formatNumber(v) {
@@ -38,6 +45,37 @@ function formatNumber(v) {
   return typeof v === "number"
     ? v.toLocaleString("en-IN", { maximumFractionDigits: 1 })
     : v;
+}
+
+function parseNumeric(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value);
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  const match = text.match(/[-+]?\d*\.?\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function safeNumber(value) {
+  return Number.isNaN(value) || value == null ? 0 : value;
+}
+
+function getLocalDateKey(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeRowDateKey(value) {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return getLocalDateKey(d);
 }
 
 const PAGE_SIZE = 15;
@@ -51,24 +89,86 @@ export default function Diesel() {
   } = useUnifiedData();
 
   const dateRange = rawData?.date_range || null;
-  const chartData = useMemo(
-    () =>
-      (rawData?.data || []).map((row) => ({
-        date: row["Date"],
-        diesel: row["Diesel consumed"] ?? 0,
-        total: row["Total Units Consumed (KWh)"] ?? 0,
-        cost: row["Total Units Consumed in INR"] ?? 0,
-      })),
-    [rawData],
-  );
+  const sourceRows = rawData?.data || [];
+  const todayDateKey = useMemo(() => getLocalDateKey(new Date()), []);
+
+  const chartData = useMemo(() => {
+    const sanitized = sourceRows.map((row) => ({
+      date: row["Date"],
+      diesel: safeNumber(parseNumeric(row["Diesel consumed"])),
+    }));
+
+    if (sanitized.length === 0) {
+      const previousDay = new Date(`${todayDateKey}T00:00:00`);
+      previousDay.setDate(previousDay.getDate() - 1);
+      return [
+        { date: getLocalDateKey(previousDay), diesel: 0 },
+        { date: todayDateKey, diesel: 0 },
+      ];
+    }
+
+    return [...sanitized].sort((a, b) => {
+      const aKey = normalizeRowDateKey(a.date);
+      const bKey = normalizeRowDateKey(b.date);
+      return aKey.localeCompare(bKey);
+    });
+  }, [sourceRows, todayDateKey]);
+
+  const dieselMetrics = useMemo(() => {
+    const rowsWithDateKey = sourceRows.map((row) => ({
+      row,
+      dateKey: normalizeRowDateKey(row["Date"]),
+    }));
+
+    const todayRows = rowsWithDateKey
+      .filter((item) => item.dateKey === todayDateKey)
+      .map((item) => item.row);
+
+    const latestDateKey = rowsWithDateKey
+      .map((item) => item.dateKey)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+
+    const fallbackRows = rowsWithDateKey
+      .filter((item) => item.dateKey === latestDateKey)
+      .map((item) => item.row);
+
+    const selectedRows = todayRows.length > 0 ? todayRows : fallbackRows;
+
+    const dieselUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Diesel consumed"]),
+      0,
+    );
+    const gridUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Grid Units Consumed (KWh)"]),
+      0,
+    );
+    const solarUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Solar Units Consumed(KWh)"]),
+      0,
+    );
+
+    const dieselUnits = safeNumber(dieselUnitsRaw);
+    const denominator =
+      safeNumber(gridUnitsRaw) + safeNumber(solarUnitsRaw) + dieselUnits;
+    const dieselContributionPct =
+      denominator > 0 ? ((dieselUnits / denominator) * 100).toFixed(2) : "0";
+
+    return {
+      dieselConsumedDisplay: Math.ceil(dieselUnits),
+      dieselContributionDisplay: `${dieselContributionPct}%`,
+    };
+  }, [sourceRows, todayDateKey]);
 
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
-  const totalDiesel = chartData.reduce((sum, r) => sum + r.diesel, 0);
-  const avgDiesel =
-    chartData.length > 0 ? totalDiesel / chartData.length : null;
+  const allDieselValuesZero = useMemo(
+    () => chartData.every((row) => safeNumber(row.diesel) === 0),
+    [chartData],
+  );
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -98,18 +198,8 @@ export default function Diesel() {
   const error = kpisError || dataError;
 
   const TABLE_COLS = [
-    { key: "date", label: "Date", format: (v) => v },
+    { key: "date", label: "Date", format: formatLongDate },
     { key: "diesel", label: "Diesel Consumed", format: formatNumber },
-    {
-      key: "total",
-      label: "Total Units Consumed (KWh)",
-      format: formatNumber,
-    },
-    {
-      key: "cost",
-      label: "Total Units Consumed in INR",
-      format: formatNumber,
-    },
   ];
 
   return (
@@ -128,7 +218,8 @@ export default function Diesel() {
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
-            {dateRange.min_date} — {dateRange.max_date}
+            {formatLongDate(dateRange.min_date)} —{" "}
+            {formatLongDate(dateRange.max_date)}
           </div>
         )}
       </div>
@@ -141,31 +232,23 @@ export default function Diesel() {
       )}
 
       {/* Diesel KPIs */}
-      <div className="grid grid-cols-3 gap-4 shrink-0">
+      <div className="grid grid-cols-2 gap-4 shrink-0">
         {kpisLoading || dataLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
+          Array.from({ length: 2 }).map((_, i) => <CardSkeleton key={i} />)
         ) : (
           <>
             <KpiCard
               label="Diesel Consumed"
-              value={kpis?.diesel_consumed_liters}
+              value={dieselMetrics.dieselConsumedDisplay}
               unit="L"
               icon={Fuel}
               accent="text-red-600"
               iconBg="bg-red-50"
             />
             <KpiCard
-              label="Avg Daily Diesel"
-              value={avgDiesel}
-              unit="L"
-              icon={Gauge}
-              accent="text-slate-700"
-              iconBg="bg-slate-100"
-            />
-            <KpiCard
-              label="Total Units Consumed"
-              value={kpis?.total_energy_kwh}
-              unit="KWh"
+              label="Diesel Contribution"
+              value={dieselMetrics.dieselContributionDisplay}
+              unit=""
               icon={Zap}
               accent="text-blue-600"
               iconBg="bg-blue-50"
@@ -189,7 +272,7 @@ export default function Diesel() {
               </div>
               {dateRange && (
                 <span className="text-xs text-slate-400">
-                  as of {dateRange.max_date}
+                  as of {formatLongDate(dateRange.max_date)}
                 </span>
               )}
             </div>
@@ -214,7 +297,18 @@ export default function Diesel() {
                     stroke="#94a3b8"
                     minTickGap={40}
                   />
-                  <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={60} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    stroke="#94a3b8"
+                    width={60}
+                    allowDataOverflow={false}
+                    domain={[0, "auto"]}
+                    label={{
+                      value: "Diesel Consumed (L)",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
                   <Tooltip
                     labelFormatter={formatDateTick}
                     contentStyle={{
@@ -225,6 +319,7 @@ export default function Diesel() {
                     }}
                   />
                   <Legend
+                    verticalAlign="top"
                     wrapperStyle={{
                       fontSize: 12,
                       paddingTop: 8,
@@ -240,13 +335,18 @@ export default function Diesel() {
                   />
                 </AreaChart>
               </ResponsiveContainer>
+              {allDieselValuesZero && (
+                <p className="mt-3 text-xs text-slate-500 text-center">
+                  No diesel consumption recorded for this period.
+                </p>
+              )}
             </div>
           </section>
         )}
 
         {/* Diesel Data Table */}
         {dataLoading ? (
-          <TableSkeleton rows={4} cols={4} />
+          <TableSkeleton rows={4} cols={2} />
         ) : (
           <section className="bg-white rounded-lg border border-slate-200">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">

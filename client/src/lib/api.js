@@ -1,4 +1,5 @@
-const API_BASE = "https://energyconsumptionreportingagent-appbe-cpghf9ewfmhpgwfn.westus-01.azurewebsites.net/api";
+const API_BASE =
+  "https://energyconsumptionreportingagent-appbe-cpghf9ewfmhpgwfn.westus-01.azurewebsites.net/api";
 
 async function request(path, params = {}) {
   const entries = Object.entries(params).filter(([, v]) => v != null);
@@ -54,6 +55,19 @@ export function updateSchedulerConfig(payload) {
 
 export function fetchSchedulerStatus() {
   return request(`${API_BASE}/scheduler/status`);
+}
+
+export async function fetchSchedulerHistory() {
+  try {
+    return await request(`${API_BASE}/scheduler/history`);
+  } catch {
+    const fallbackUrl = "http://127.0.0.1:8000/api/scheduler/history";
+    const res = await fetch(fallbackUrl);
+    if (!res.ok) {
+      throw new Error(`Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
 }
 
 export function startScheduler(startTime) {

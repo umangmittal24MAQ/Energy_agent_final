@@ -4,13 +4,12 @@ import {
   TableSkeleton,
 } from "../components/Skeleton";
 import { useState, useMemo } from "react";
-import { useKpis, useUnifiedData } from "../lib/hooks";
+import { useUnifiedData } from "../lib/hooks";
 import KpiCard from "../components/KpiCard";
 import {
   Sun,
   PiggyBank,
   TrendingUp,
-  Loader2,
   AlertCircle,
   Calendar,
   Zap,
@@ -27,24 +26,62 @@ import {
   Legend,
 } from "recharts";
 
-function formatDateTick(dateStr) {
+function formatLongDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatDateTick(dateStr) {
+  return formatLongDate(dateStr);
 }
 
 function formatNumber(v) {
   if (v == null) return "—";
-  return typeof v === "number"
-    ? v.toLocaleString("en-IN", { maximumFractionDigits: 1 })
-    : v;
+  const numeric = typeof v === "number" ? v : Number(v);
+  if (Number.isFinite(numeric)) {
+    return Math.ceil(numeric).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  }
+  return v;
+}
+
+function parseNumeric(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value);
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  const match = text.match(/[-+]?\d*\.?\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function getLocalDateKey(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeRowDateKey(value) {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return getLocalDateKey(d);
 }
 
 const PAGE_SIZE = 15;
 
 export default function Solar() {
-  const { data: kpis, isLoading: kpisLoading, error: kpisError } = useKpis();
   const {
     data: unified,
     isLoading: dataLoading,
@@ -56,6 +93,67 @@ export default function Solar() {
   const [sortAsc, setSortAsc] = useState(false);
 
   const dateRange = unified?.date_range || null;
+  const sourceRows = unified?.data || [];
+
+  const metricValues = useMemo(() => {
+    if (sourceRows.length === 0) {
+      return {
+        solarUnits: 0,
+        solarCostSaving: 0,
+        solarShare: "0",
+      };
+    }
+
+    const todayKey = getLocalDateKey(new Date());
+    const rowsWithKey = sourceRows.map((row) => ({
+      row,
+      dateKey: normalizeRowDateKey(row["Date"]),
+    }));
+
+    const todayRows = rowsWithKey
+      .filter((item) => item.dateKey === todayKey)
+      .map((item) => item.row);
+
+    const latestDateKey = rowsWithKey
+      .map((item) => item.dateKey)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+
+    const fallbackRows = rowsWithKey
+      .filter((item) => item.dateKey === latestDateKey)
+      .map((item) => item.row);
+
+    const selectedRows = todayRows.length > 0 ? todayRows : fallbackRows;
+
+    const solarUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Solar Units Consumed(KWh)"]),
+      0,
+    );
+    const gridUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Grid Units Consumed (KWh)"]),
+      0,
+    );
+    const dieselUnitsRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Diesel consumed"]),
+      0,
+    );
+    const solarCostSavingRaw = selectedRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Energy Saving in INR"]),
+      0,
+    );
+
+    const denominator = gridUnitsRaw + solarUnitsRaw + dieselUnitsRaw;
+    const solarShareValue =
+      denominator > 0 ? ((solarUnitsRaw / denominator) * 100).toFixed(2) : "0";
+
+    return {
+      solarUnits: Math.ceil(solarUnitsRaw),
+      solarCostSaving: Math.ceil(solarCostSavingRaw),
+      solarShare: solarShareValue,
+    };
+  }, [sourceRows]);
+
   const chartData = useMemo(
     () =>
       (unified?.data || []).map((row) => ({
@@ -66,11 +164,6 @@ export default function Solar() {
       })),
     [unified],
   );
-
-  const solarShare =
-    kpis?.total_solar_kwh && kpis?.total_energy_kwh
-      ? ((kpis.total_solar_kwh / kpis.total_energy_kwh) * 100).toFixed(1)
-      : null;
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -97,10 +190,10 @@ export default function Solar() {
     setPage(0);
   }
 
-  const error = kpisError || dataError;
+  const error = dataError;
 
   const TABLE_COLS = [
-    { key: "date", label: "Date", format: (v) => v },
+    { key: "date", label: "Date", format: formatLongDate },
     {
       key: "solar",
       label: "Solar Units Consumed (KWh)",
@@ -111,7 +204,11 @@ export default function Solar() {
       label: "Total Units Consumed (KWh)",
       format: formatNumber,
     },
-    { key: "savings", label: "Energy Saving (INR)", format: formatNumber },
+    {
+      key: "savings",
+      label: "Solar Cost Saving (INR)",
+      format: formatNumber,
+    },
   ];
 
   return (
@@ -130,7 +227,8 @@ export default function Solar() {
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
-            {dateRange.min_date} — {dateRange.max_date}
+            {formatLongDate(dateRange.min_date)} —{" "}
+            {formatLongDate(dateRange.max_date)}
           </div>
         )}
       </div>
@@ -144,21 +242,21 @@ export default function Solar() {
 
       {/* Solar KPIs */}
       <div className="grid grid-cols-3 gap-4 shrink-0">
-        {kpisLoading ? (
+        {dataLoading ? (
           Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
         ) : (
           <>
             <KpiCard
               label="Solar Units Consumed"
-              value={kpis?.total_solar_kwh}
+              value={metricValues.solarUnits}
               unit="KWh"
               icon={Sun}
               accent="text-amber-600"
               iconBg="bg-amber-50"
             />
             <KpiCard
-              label="Energy Saving"
-              value={kpis?.solar_savings_inr}
+              label="Solar Cost Saving (INR)"
+              value={metricValues.solarCostSaving}
               unit="INR"
               icon={PiggyBank}
               accent="text-emerald-600"
@@ -166,7 +264,7 @@ export default function Solar() {
             />
             <KpiCard
               label="Solar Share"
-              value={solarShare}
+              value={metricValues.solarShare}
               unit="%"
               icon={Zap}
               accent="text-blue-600"
@@ -191,7 +289,7 @@ export default function Solar() {
               </div>
               {dateRange && (
                 <span className="text-xs text-slate-400">
-                  as of {dateRange.max_date}
+                  as of {formatLongDate(dateRange.max_date)}
                 </span>
               )}
             </div>
@@ -223,6 +321,7 @@ export default function Solar() {
                     }}
                   />
                   <Legend
+                    verticalAlign="top"
                     wrapperStyle={{
                       fontSize: 12,
                       paddingTop: 8,
