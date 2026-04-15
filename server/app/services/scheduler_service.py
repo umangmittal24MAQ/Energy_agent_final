@@ -94,14 +94,21 @@ def start_scheduler(send_time: str = DAILY_REPORT_CRON_TIME) -> Dict[str, Any]:
     save_scheduler_config(cfg)
     return {"status": "running"}
 
-def stop_scheduler() -> Dict[str, Any]:
+def stop_scheduler(disable_auto_start: bool = True) -> Dict[str, Any]:
     if _scheduler:
-        for job_id in [SCHEDULER_JOB_ID, "operator_reminder_9am_930am", "operator_reminder_10am", "suryalogix_scraper_job", "data_refresh_interval"]:
-            if _scheduler.get_job(job_id):
-                _scheduler.remove_job(job_id)
-    cfg = load_scheduler_config()
-    cfg["auto_start"] = False
-    save_scheduler_config(cfg)
+        for job in list(_scheduler.get_jobs()):
+            if job.id in [
+                SCHEDULER_JOB_ID,
+                "suryalogix_scraper_job",
+                "data_refresh_interval",
+            ] or job.id.startswith("operator_reminder_"):
+                _scheduler.remove_job(job.id)
+
+    # Do not mutate persistent auto_start during process lifecycle shutdowns.
+    if disable_auto_start:
+        cfg = load_scheduler_config()
+        cfg["auto_start"] = False
+        save_scheduler_config(cfg)
     return {"status": "stopped"}
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -156,15 +163,40 @@ def check_grid_diesel_entry_exists() -> bool:
             parsed_dates = parsed_dates.fillna(general_dates)
             
         df["_parsed_date"] = parsed_dates.dt.date
-        
-        # 3. Check for today
-        if not df[df["_parsed_date"] == today].empty:
+        today_rows = df[df["_parsed_date"] == today]
+        if today_rows.empty:
+            top_3 = df["_parsed_date"].head(3).tolist()
+            logger.error(f"[SCHEDULER DEBUG] Could not find {today} in Excel. Top 3 parsed dates are: {top_3}")
+            return False
+
+        def _normalized(name: Any) -> str:
+            return str(name).lower().replace(" ", "").replace("_", "").replace("\n", "")
+
+        def _has_value(value: Any) -> bool:
+            if value is None:
+                return False
+            if pd.isna(value):
+                return False
+            text = str(value).strip().lower()
+            return text not in {"", "nan", "none", "null"}
+
+        grid_units_col = next(
+            (
+                c for c in df.columns
+                if "grid" in _normalized(c) and "unit" in _normalized(c)
+            ),
+            None,
+        )
+
+        if not grid_units_col:
+            logger.error("[SCHEDULER] Could not locate Grid Units column in Grid and Diesel data.")
+            return False
+
+        if today_rows[grid_units_col].apply(_has_value).any():
             logger.info(f"[SCHEDULER DEBUG] SUCCESS! Found operator data for: {today}")
             return True
-            
-        # 4. If it fails, print the parsed dates to the Azure log
-        top_3 = df["_parsed_date"].head(3).tolist()
-        logger.error(f"[SCHEDULER DEBUG] Could not find {today} in Excel. Top 3 parsed dates are: {top_3}")
+
+        logger.info("[SCHEDULER] Today's row exists but Grid Units is blank; treating as missing data.")
         return False
         
     except Exception as e:
@@ -440,6 +472,8 @@ def initialize_scheduler_from_config() -> None:
     """Boot sequence triggered by main.py."""
     if not HAS_SCHEDULER:
         return
+
+    _ensure_scheduler_started()
         
     _run_data_refresh()
     

@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
     
     # --- PHASE C: Shutdown Logic ---
     logger.info("Shutting down background scheduler...")
-    stop_scheduler()
+    stop_scheduler(disable_auto_start=False)
     logger.info("Server shutting down...")
 
 
