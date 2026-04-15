@@ -26,6 +26,10 @@ import io
 import logging
 import os
 import sys
+
+# THE FIX: Force Playwright to look in Azure's persistent storage BEFORE it imports!
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/home/site/pw-browsers"
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,6 +38,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging
