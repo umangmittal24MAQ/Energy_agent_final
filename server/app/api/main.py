@@ -4,6 +4,9 @@ FastAPI application setup and middleware configuration
 import os
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +20,10 @@ from app.core.logger import setup_logging, get_logger
 from app.services.scheduler_service import initialize_scheduler_from_config, stop_scheduler
 
 logger = get_logger(__name__)
+
+# Ensure server/.env is loaded for all routes/services (SharePoint, SMTP, scheduler).
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 # --- 1. THE UNIFIED LIFESPAN MANAGER ---
 @asynccontextmanager

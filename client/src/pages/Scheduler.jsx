@@ -10,7 +10,10 @@ import {
 import {
   CalendarClock,
   Send,
+<<<<<<< HEAD
   Save,
+=======
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
   Plus,
   X,
   Clock,
@@ -19,7 +22,10 @@ import {
   StopCircle,
   CheckCircle2,
   History,
+<<<<<<< HEAD
   FileText,
+=======
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
   Loader2,
   AlertCircle,
 } from "lucide-react";
@@ -67,6 +73,7 @@ export default function Scheduler() {
   const [sendHistory, setSendHistory] = useState([]);
   const [isSchedulerRunning, setIsSchedulerRunning] = useState(false);
 
+<<<<<<< HEAD
   useEffect(() => {
     async function loadScheduler() {
       try {
@@ -75,6 +82,25 @@ export default function Scheduler() {
           fetchSchedulerStatus(),
         ]);
 
+=======
+  const toRecipients = useMemo(
+    () => recipients.map((r) => r.trim()).filter(Boolean),
+    [recipients],
+  );
+  const ccRecipients = useMemo(
+    () => cc.map((r) => r.trim()).filter(Boolean),
+    [cc],
+  );
+
+  useEffect(() => {
+    async function loadScheduler() {
+      try {
+        const [config, status] = await Promise.all([
+          fetchSchedulerConfig(),
+          fetchSchedulerStatus(),
+        ]);
+
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
         if (config?.to) {
           const toList = String(config.to)
             .split(",")
@@ -99,9 +125,15 @@ export default function Scheduler() {
           setStartTime(config.send_time);
         }
 
+<<<<<<< HEAD
         if (status?.next_run) {
           setNextRunLabel(formatDateTime(status.next_run));
         }
+=======
+        setNextRunLabel(
+          status?.next_run ? formatDateTime(status.next_run) : "—",
+        );
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
         setIsSchedulerRunning(status?.status === "running");
       } catch {
         // Keep form defaults if scheduler config/status fetch fails.
@@ -111,6 +143,25 @@ export default function Scheduler() {
     loadScheduler();
   }, []);
 
+<<<<<<< HEAD
+=======
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try {
+        const status = await fetchSchedulerStatus();
+        setIsSchedulerRunning(status?.status === "running");
+        setNextRunLabel(
+          status?.next_run ? formatDateTime(status.next_run) : "—",
+        );
+      } catch {
+        // Keep current status display if polling fails temporarily.
+      }
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
   function addRecipient() {
     setRecipients((prev) => [...prev, ""]);
   }
@@ -173,6 +224,7 @@ export default function Scheduler() {
     }
   }
 
+<<<<<<< HEAD
   async function handleSaveConfiguration() {
     await persistConfiguration({ showSuccess: true });
   }
@@ -240,6 +292,71 @@ export default function Scheduler() {
         return;
       }
 
+=======
+  async function handleSendNow() {
+    const toList = recipients.filter(Boolean);
+    if (toList.length === 0) return;
+
+    setSending(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    try {
+      const saved = await persistConfiguration({
+        showSuccess: false,
+        autoStartOverride: true,
+      });
+      if (!saved) {
+        return;
+      }
+
+      await sendTestEmail();
+
+      setSendHistory((prev) => [
+        {
+          id: Date.now(),
+          to: toList[0],
+          subject,
+          sentAt: new Date().toISOString(),
+          status: "delivered",
+        },
+        ...prev,
+      ]);
+      setSuccessMsg("Email sent successfully to " + toList.join(", "));
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err) {
+      setSendHistory((prev) => [
+        {
+          id: Date.now(),
+          to: toList[0],
+          subject,
+          sentAt: new Date().toISOString(),
+          status: "failed",
+        },
+        ...prev,
+      ]);
+      setErrorMsg(err.message || "Failed to send email");
+      setTimeout(() => setErrorMsg(null), 5000);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleSchedule() {
+    setScheduling(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    try {
+      const saved = await persistConfiguration({
+        showSuccess: false,
+        autoStartOverride: true,
+      });
+      if (!saved) {
+        return;
+      }
+
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
       const started = await startScheduler(startTime);
       if (started?.next_run) {
         setNextRunLabel(formatDateTime(started.next_run));
@@ -422,6 +539,7 @@ export default function Scheduler() {
                 </div>
               </div>
 
+<<<<<<< HEAD
               <div className="grid gap-3 lg:grid-cols-3">
                 <div className="lg:col-span-2 space-y-2">
                   <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
@@ -448,6 +566,19 @@ export default function Scheduler() {
                     className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors text-slate-700"
                   />
                 </div>
+=======
+              <div className="space-y-2 max-w-sm">
+                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  Start Time
+                </label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-colors text-slate-700"
+                />
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -461,6 +592,7 @@ export default function Scheduler() {
                   </p>
                 </div>
 
+<<<<<<< HEAD
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 [&>button]:px-3 [&>button]:py-2">
                   <button
                     onClick={handleSaveConfiguration}
@@ -477,6 +609,16 @@ export default function Scheduler() {
                   >
                     <CalendarClock className="w-4 h-4" />
                     Schedule
+=======
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 [&>button]:px-3 [&>button]:py-2">
+                  <button
+                    onClick={handleSchedule}
+                    disabled={scheduling || saving || sending}
+                    className="inline-flex items-center justify-center gap-2 w-full bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                    Save & Schedule
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
                   </button>
                   <button
                     onClick={handleStopScheduler}
@@ -532,6 +674,38 @@ export default function Scheduler() {
 
             <div className="rounded-xl border border-slate-200 bg-white p-3">
               <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">
+<<<<<<< HEAD
+=======
+                Schedule Summary
+              </h3>
+              <div className="space-y-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[11px] text-slate-500">
+                    Next Scheduled Mail
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {isSchedulerRunning ? nextRunLabel : "Scheduler is stopped"}
+                  </p>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[11px] text-slate-500">Recipients (To)</p>
+                  <p className="text-xs font-medium text-slate-700 wrap-break-word">
+                    {toRecipients.length
+                      ? toRecipients.join(", ")
+                      : "No recipients configured"}
+                  </p>
+                  {ccRecipients.length > 0 && (
+                    <p className="text-xs text-slate-500 wrap-break-word mt-1">
+                      CC: {ccRecipients.join(", ")}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-3">
+              <h3 className="text-xs font-semibold tracking-wide uppercase text-slate-500 mb-2">
+>>>>>>> 900a9262472668674d0f50aad952959afd7b8542
                 Activity Snapshot
               </h3>
               <div className="grid grid-cols-2 gap-2">

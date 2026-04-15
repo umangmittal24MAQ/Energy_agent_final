@@ -10,9 +10,9 @@ from app.services.sharepoint_data_service import get_service as get_excel_servic
 logger = logging.getLogger(__name__)
 
 def _get_master_data(start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-    """Core function to fetch and filter the unified master data."""
+    """Core function to fetch and filter unified data from Electrical Optimization."""
     sp_service = get_excel_service()
-    df = sp_service.fetch_sheet_data("master_data")
+    df = sp_service.fetch_sheet_data("grid_and_diesel")
     
     if df is None or df.empty:
         return pd.DataFrame()
@@ -23,6 +23,10 @@ def _get_master_data(start_date: Optional[str] = None, end_date: Optional[str] =
             df = df[df["Date"] >= pd.to_datetime(start_date)]
         if end_date:
             df = df[df["Date"] <= pd.to_datetime(end_date)]
+
+        # Exclude Sunday records from unified dashboard data.
+        df = df[df["Date"].dt.weekday != 6]
+
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
         
     return df

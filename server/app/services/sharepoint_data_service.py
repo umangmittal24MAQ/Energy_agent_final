@@ -69,6 +69,23 @@ class SharePointDataService:
     def get_last_error(self) -> Optional[str]:
         return self.last_error
 
+    def _normalize_sheet_headers(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalizes headers for sheets where row 1 contains the real column names."""
+        if df is None or df.empty:
+            return df
+
+        cols = [str(c) for c in df.columns]
+        if any("Unnamed" in c for c in cols):
+            for i, row in df.head(10).iterrows():
+                if any("date" in str(v).lower() for v in row.values):
+                    df.columns = [str(c).strip().replace("\n", " ") for c in row.values]
+                    df = df.iloc[i + 1 :].reset_index(drop=True)
+                    break
+        else:
+            df.columns = [str(c).strip().replace("\n", " ") for c in df.columns]
+
+        return df
+
     def _get_file_item_id(self, site_url: str, drive_id: str, file_name: str, folder_path: str = "") -> Optional[str]:
         if not self.authenticated:
             self.last_error = "Not authenticated"
@@ -134,6 +151,7 @@ class SharePointDataService:
             
             excel_file = io.BytesIO(response.content)
             df = pd.read_excel(excel_file, sheet_name=config["sheet_name"])
+            df = self._normalize_sheet_headers(df)
             
             logger.info(f"Successfully fetched data from SharePoint: {sheet_key} ({len(df)} rows)")
             return df
