@@ -1,16 +1,9 @@
 {
-<<<<<<< HEAD
-    "to": "umang.mittal@maqsoftware.com",
-    "cc": "",
-    "send_time": "10:00",
+    "to": "ojasu@maqsoftware.com",
+    "cc": "vimalv@maqsoftware.com,ramc@maqsoftware.com,amrishs@maqsoftware.com,naveenk@maqsoftware.com,prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com,krishnav@maqsoftware.com,ishitas@maqsoftware.com",
+    "send_time": "09:00",
     "subject": "Review Noida Daily Energy Optimization — {date}",
     "custom_message": "",
-=======
-    "to": "ishitas@maqsoftware.com,krishnav@maqsoftware.com",
-    "cc": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
-    "start_time": "09:00",
-    "subject": "Daily Energy Report",
->>>>>>> 900a9262472668674d0f50aad952959afd7b8542
     "auto_start": true,
     "include_sections": {
         "summary_kpis": true,

@@ -1,1 +1,0 @@
-# Energy dashboard module
