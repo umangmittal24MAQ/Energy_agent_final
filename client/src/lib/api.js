@@ -1,16 +1,48 @@
-const DEFAULT_LOCAL_API_BASE = "http://127.0.0.1:8000/api";
+const isLocalDevHost = /^(localhost|127\.0\.0\.1)$/i.test(
+  window.location.hostname,
+);
+const DEFAULT_LOCAL_API_ORIGIN = isLocalDevHost
+  ? `${window.location.protocol}//${window.location.hostname}:8000`
+  : "http://localhost:8000";
+
+function toOrigin(value, fallbackProtocol = "https") {
+  if (!value) return null;
+  const withProtocol = /^https?:\/\//i.test(value)
+    ? value
+    : `${fallbackProtocol}://${value}`;
+  try {
+    return new URL(withProtocol).origin;
+  } catch {
+    return null;
+  }
+}
+
+export const BACKEND_ORIGIN = (() => {
+  const explicitBase = import.meta.env.VITE_API_BASE_URL;
+  if (explicitBase) {
+    try {
+      return new URL(explicitBase).origin;
+    } catch {
+      const fallback = toOrigin(explicitBase, "http");
+      if (fallback) return fallback;
+    }
+  }
+
+  const host = import.meta.env.VITE_API_URL;
+  if (host) {
+    const useHttpForLocal =
+      /^localhost(?::\d+)?$|^127\.0\.0\.1(?::\d+)?$/i.test(host);
+    const normalized = toOrigin(host, useHttpForLocal ? "http" : "https");
+    if (normalized) return normalized;
+  }
+
+  return DEFAULT_LOCAL_API_ORIGIN;
+})();
 
 const API_BASE = (() => {
   const explicitBase = import.meta.env.VITE_API_BASE_URL;
   if (explicitBase) return explicitBase.replace(/\/+$/, "");
-
-  const host = import.meta.env.VITE_API_URL;
-  if (host) {
-    const normalizedHost = /^https?:\/\//i.test(host) ? host : `https://${host}`;
-    return `${normalizedHost.replace(/\/+$/, "")}/api`;
-  }
-
-  return DEFAULT_LOCAL_API_BASE;
+  return `${BACKEND_ORIGIN}/api`;
 })();
 
 async function authFetch(url, options = {}) {
@@ -23,9 +55,16 @@ async function authFetch(url, options = {}) {
     },
   });
 
+  if (response.status !== 401) {
+    sessionStorage.removeItem("auth-reload-once");
+  }
+
   if (response.status === 401) {
-    console.warn("Session expired or invalid. Redirecting to login...");
-    window.location.reload();
+    if (!sessionStorage.getItem("auth-reload-once")) {
+      sessionStorage.setItem("auth-reload-once", "1");
+      console.warn("Session expired or invalid. Redirecting to login...");
+      window.location.reload();
+    }
   }
 
   return response;
@@ -44,7 +83,8 @@ async function request(path, params = {}) {
 }
 
 async function requestJson(path, method = "POST", body = null) {
-  const res = await authFetch(path, { // Use authFetch
+  const res = await authFetch(path, {
+    // Use authFetch
     method,
     body: body == null ? undefined : JSON.stringify(body),
   });
@@ -58,11 +98,17 @@ async function requestJson(path, method = "POST", body = null) {
 
 // --- Your existing exported functions remain exactly the same! ---
 export function fetchKpis({ startDate, endDate } = {}) {
-  return request(`${API_BASE}/kpis/dashboard`, { start_date: startDate, end_date: endDate });
+  return request(`${API_BASE}/kpis/dashboard`, {
+    start_date: startDate,
+    end_date: endDate,
+  });
 }
 
 export function fetchUnifiedData({ startDate, endDate } = {}) {
-  return request(`${API_BASE}/data/live/unified`, { start_date: startDate, end_date: endDate });
+  return request(`${API_BASE}/data/live/unified`, {
+    start_date: startDate,
+    end_date: endDate,
+  });
 }
 
 export async function sendTestEmail() {
@@ -85,8 +131,8 @@ export async function fetchSchedulerHistory() {
   try {
     return await request(`${API_BASE}/scheduler/history`);
   } catch {
-    const fallbackUrl = "http://127.0.0.1:8000/api/scheduler/history";
-    const res = await fetch(fallbackUrl);
+    const fallbackUrl = `${BACKEND_ORIGIN}/api/scheduler/history`;
+    const res = await fetch(fallbackUrl, { credentials: "include" });
     if (!res.ok) {
       throw new Error(`Request failed: ${res.status}`);
     }
@@ -95,7 +141,9 @@ export async function fetchSchedulerHistory() {
 }
 
 export function startScheduler(startTime) {
-  return requestJson(`${API_BASE}/scheduler/start`, "POST", { start_time: startTime });
+  return requestJson(`${API_BASE}/scheduler/start`, "POST", {
+    start_time: startTime,
+  });
 }
 
 export function stopSchedulerApi() {

@@ -220,7 +220,10 @@ export default function Overview() {
     [sourceRows],
   );
 
-  const trendChartData = useMemo(() => sortRowsByDateAsc(chartData), [chartData]);
+  const trendChartData = useMemo(
+    () => sortRowsByDateAsc(chartData),
+    [chartData],
+  );
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -250,7 +253,7 @@ export default function Overview() {
   const error = kpisError || dataError;
 
   return (
-    <div className="px-8 py-6 bg-gray-100 rounded-3xl h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+    <div className="px-8 py-6 bg-gray-100 rounded-3xl">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0 mb-6">
         <div>
@@ -343,7 +346,7 @@ export default function Overview() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-6">
+      <div className="space-y-6">
         {/* Charts */}
         {dataLoading ? (
           <div className="flex items-stretch gap-4">

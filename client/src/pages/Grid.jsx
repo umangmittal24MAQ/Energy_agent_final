@@ -165,7 +165,10 @@ export default function Grid() {
     [rawData],
   );
 
-  const trendChartData = useMemo(() => sortRowsByDateAsc(chartData), [chartData]);
+  const trendChartData = useMemo(
+    () => sortRowsByDateAsc(chartData),
+    [chartData],
+  );
 
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");

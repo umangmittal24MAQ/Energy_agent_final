@@ -1,5 +1,6 @@
 import { useMsal, useIsAuthenticated } from "@azure/msal-react";
 import { useEffect, useState } from "react";
+import { BACKEND_ORIGIN } from "../lib/api";
 
 export const AuthGate = ({ children }: { children: React.ReactNode }) => {
     const { instance, accounts } = useMsal();
@@ -17,13 +18,8 @@ export const AuthGate = ({ children }: { children: React.ReactNode }) => {
                         account: accounts[0]
                     });
 
-                    // Locally: VITE_API_URL is unset, so this falls back to localhost:8000
-                    const backendBase = import.meta.env.VITE_API_URL
-                        ? `https://${import.meta.env.VITE_API_URL}`
-                        : "http://localhost:8000";
-
                     // 2. Send ID token to FastAPI to exchange for the HttpOnly session cookie
-                    const apiResponse = await fetch(`${backendBase}/api/auth/session`, {
+                    const apiResponse = await fetch(`${BACKEND_ORIGIN}/api/auth/session`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ id_token: response.idToken }),

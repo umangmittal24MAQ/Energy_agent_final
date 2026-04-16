@@ -1,5 +1,4 @@
 import {
-  DatabaseZap,
   LayoutDashboard,
   Sun,
   PlugZap,
@@ -8,6 +7,7 @@ import {
   LogOut // 🚀 Import the LogOut icon
 } from "lucide-react";
 import { useMsal } from "@azure/msal-react"; // 🚀 Import MSAL
+import { BACKEND_ORIGIN } from "../lib/api";
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -22,12 +22,10 @@ export default function Sidebar({ active, onNavigate }) {
 
   const handleLogout = async () => {
     try {
-      const backendUrl = import.meta.env.VITE_API_URL 
-        ? `https://${import.meta.env.VITE_API_URL}/api/auth/logout`
-        : "http://localhost:8000/api/auth/logout";
+      const backendUrl = `${BACKEND_ORIGIN}/api/auth/logout`;
 
       // 1. Tell FastAPI to destroy the cookie
-      await fetch(backendUrl, { method: "POST", credentials: "include" });
+      await fetch(backendUrl, { method: "DELETE", credentials: "include" });
       
       // 2. Tell Microsoft to sign out locally
       instance.logoutRedirect({ postLogoutRedirectUri: window.location.origin });
@@ -38,13 +36,12 @@ export default function Sidebar({ active, onNavigate }) {
 
   return (
     <aside className="w-48 shrink-0 bg-gray-100 flex flex-col rounded-3xl sticky top-4 h-[calc(100vh-2rem)] self-start">
-      <div className="px-4 py-4 flex items-center gap-2 ">
-        <div className="p-1 rounded-lg flex items-center justify-center">
-          <DatabaseZap className=" text-blue-600" strokeWidth={2.5} />
+      <div className="px-4 py-4 border-b border-slate-200">
+        <div className="flex items-baseline gap-1 leading-none">
+          <span className="text-2xl font-extrabold tracking-tight text-red-600">MAQ</span>
+          <span className="text-2xl font-medium tracking-tight text-slate-600">Software</span>
         </div>
-        <span className="text-xs font-semibold text-slate-900 tracking-tight">
-          Energy Dashboard
-        </span>
+        <p className="mt-2 text-xs font-semibold text-slate-500 tracking-tight">Energy Dashboard</p>
       </div>
       <span className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex">
         Menu

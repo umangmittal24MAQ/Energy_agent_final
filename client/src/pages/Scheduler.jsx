@@ -402,7 +402,7 @@ export default function Scheduler() {
               <Users className="w-3.5 h-3.5" /> Recipients (To):
             </p>
             <p
-              className="text-sm font-medium text-slate-800 truncate"
+              className="text-sm font-medium text-slate-800 whitespace-normal break-words"
               title={toRecipients.join(", ")}
             >
               {toRecipients.length
@@ -415,7 +415,7 @@ export default function Scheduler() {
               <Mail className="w-3.5 h-3.5" /> CC:
             </p>
             <p
-              className="text-sm font-medium text-slate-800 truncate"
+              className="text-sm font-medium text-slate-800 whitespace-normal break-words"
               title={ccRecipients.join(", ")}
             >
               {ccRecipients.length

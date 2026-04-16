@@ -175,7 +175,10 @@ export default function Solar() {
     [unified],
   );
 
-  const trendChartData = useMemo(() => sortRowsByDateAsc(chartData), [chartData]);
+  const trendChartData = useMemo(
+    () => sortRowsByDateAsc(chartData),
+    [chartData],
+  );
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
