@@ -1,20 +1,28 @@
-// Use environment variable for the base URL, falling back to local dev if not set
-const API_BASE = import.meta.env.VITE_API_URL 
-    ? `https://${import.meta.env.VITE_API_URL}/api`
-    : "http://localhost:8000/api";
+const DEFAULT_LOCAL_API_BASE = "http://127.0.0.1:8000/api";
 
-// 🚀 The master fetch wrapper that attaches the secure cookie
+const API_BASE = (() => {
+  const explicitBase = import.meta.env.VITE_API_BASE_URL;
+  if (explicitBase) return explicitBase.replace(/\/+$/, "");
+
+  const host = import.meta.env.VITE_API_URL;
+  if (host) {
+    const normalizedHost = /^https?:\/\//i.test(host) ? host : `https://${host}`;
+    return `${normalizedHost.replace(/\/+$/, "")}/api`;
+  }
+
+  return DEFAULT_LOCAL_API_BASE;
+})();
+
 async function authFetch(url, options = {}) {
   const response = await fetch(url, {
     ...options,
-    credentials: "include", // 🚨 CRITICAL: Sends the HttpOnly session cookie
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...options.headers,
     },
   });
 
-  // If the backend rejects the cookie (expired/invalid), force a re-login
   if (response.status === 401) {
     console.warn("Session expired or invalid. Redirecting to login...");
     window.location.reload();

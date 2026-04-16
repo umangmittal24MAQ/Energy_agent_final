@@ -130,6 +130,16 @@ function normalizeRowDateKey(value) {
   return `${year}-${month}-${day}`;
 }
 
+function sortRowsByDateAsc(rows) {
+  return [...rows].sort((a, b) => {
+    const aKey = normalizeRowDateKey(a.date) || String(a.date ?? "");
+    const bKey = normalizeRowDateKey(b.date) || String(b.date ?? "");
+    if (aKey < bKey) return -1;
+    if (aKey > bKey) return 1;
+    return 0;
+  });
+}
+
 const PAGE_SIZE = 15;
 
 export default function Overview() {
@@ -209,6 +219,8 @@ export default function Overview() {
       })),
     [sourceRows],
   );
+
+  const trendChartData = useMemo(() => sortRowsByDateAsc(chartData), [chartData]);
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -361,7 +373,7 @@ export default function Overview() {
               </div>
               <div className="p-5">
                 <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={chartData}>
+                  <LineChart data={trendChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
                       dataKey="date"
@@ -437,7 +449,7 @@ export default function Overview() {
               </div>
               <div className="p-5">
                 <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={chartData}>
+                  <BarChart data={trendChartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
                       dataKey="date"

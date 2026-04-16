@@ -78,6 +78,16 @@ function normalizeRowDateKey(value) {
   return getLocalDateKey(d);
 }
 
+function sortRowsByDateAsc(rows) {
+  return [...rows].sort((a, b) => {
+    const aKey = normalizeRowDateKey(a.date) || String(a.date ?? "");
+    const bKey = normalizeRowDateKey(b.date) || String(b.date ?? "");
+    if (aKey < bKey) return -1;
+    if (aKey > bKey) return 1;
+    return 0;
+  });
+}
+
 const PAGE_SIZE = 15;
 
 export default function Grid() {
@@ -154,6 +164,8 @@ export default function Grid() {
       })),
     [rawData],
   );
+
+  const trendChartData = useMemo(() => sortRowsByDateAsc(chartData), [chartData]);
 
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
@@ -271,7 +283,7 @@ export default function Grid() {
             </div>
             <div className="p-5">
               <ResponsiveContainer width="100%" height={320}>
-                <AreaChart data={chartData}>
+                <AreaChart data={trendChartData}>
                   <defs>
                     <linearGradient id="gridGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop
