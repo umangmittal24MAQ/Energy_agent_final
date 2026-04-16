@@ -1,11 +1,34 @@
-const API_BASE = "https://energyconsumptionreportingagent-appbe-cpghf9ewfmhpgwfn.westus-01.azurewebsites.net/api";
+// Use environment variable for the base URL, falling back to local dev if not set
+const API_BASE = import.meta.env.VITE_API_URL 
+    ? `https://${import.meta.env.VITE_API_URL}/api`
+    : "http://localhost:8000/api";
+
+// 🚀 The master fetch wrapper that attaches the secure cookie
+async function authFetch(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    credentials: "include", // 🚨 CRITICAL: Sends the HttpOnly session cookie
+    headers: {
+      "Content-Type": "application/json",
+      ...options.headers,
+    },
+  });
+
+  // If the backend rejects the cookie (expired/invalid), force a re-login
+  if (response.status === 401) {
+    console.warn("Session expired or invalid. Redirecting to login...");
+    window.location.reload();
+  }
+
+  return response;
+}
 
 async function request(path, params = {}) {
   const entries = Object.entries(params).filter(([, v]) => v != null);
   const query = new URLSearchParams(entries).toString();
   const url = query ? `${path}?${query}` : path;
 
-  const res = await fetch(url);
+  const res = await authFetch(url); // Use authFetch
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status}`);
   }
@@ -13,9 +36,8 @@ async function request(path, params = {}) {
 }
 
 async function requestJson(path, method = "POST", body = null) {
-  const res = await fetch(path, {
+  const res = await authFetch(path, { // Use authFetch
     method,
-    headers: { "Content-Type": "application/json" },
     body: body == null ? undefined : JSON.stringify(body),
   });
 
@@ -26,18 +48,13 @@ async function requestJson(path, method = "POST", body = null) {
   return res.json();
 }
 
+// --- Your existing exported functions remain exactly the same! ---
 export function fetchKpis({ startDate, endDate } = {}) {
-  return request(`${API_BASE}/kpis/dashboard`, {
-    start_date: startDate,
-    end_date: endDate,
-  });
+  return request(`${API_BASE}/kpis/dashboard`, { start_date: startDate, end_date: endDate });
 }
 
 export function fetchUnifiedData({ startDate, endDate } = {}) {
-  return request(`${API_BASE}/data/live/unified`, {
-    start_date: startDate,
-    end_date: endDate,
-  });
+  return request(`${API_BASE}/data/live/unified`, { start_date: startDate, end_date: endDate });
 }
 
 export async function sendTestEmail() {
@@ -57,9 +74,7 @@ export function fetchSchedulerStatus() {
 }
 
 export function startScheduler(startTime) {
-  return requestJson(`${API_BASE}/scheduler/start`, "POST", {
-    start_time: startTime,
-  });
+  return requestJson(`${API_BASE}/scheduler/start`, "POST", { start_time: startTime });
 }
 
 export function stopSchedulerApi() {

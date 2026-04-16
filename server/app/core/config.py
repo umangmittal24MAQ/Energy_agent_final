@@ -66,7 +66,7 @@ class Settings(BaseSettings):
 
     # General
     timezone: str = Field(default="Asia/Kolkata", validation_alias="TIMEZONE")
-    allowed_origins: str = Field(default="http://localhost:5173,http://127.0.0.1:5173", validation_alias="ALLOWED_ORIGINS")
+    allowed_origins: str = Field(default="http://localhost:5172,http://127.0.0.1:5173", validation_alias="ALLOWED_ORIGINS")
 
     # Cost Configuration
     grid_cost_per_unit: float = Field(default=7.11, validation_alias="GRID_COST_PER_UNIT")

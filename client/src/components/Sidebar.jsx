@@ -5,7 +5,9 @@ import {
   PlugZap,
   Fuel,
   CalendarClock,
+  LogOut // 🚀 Import the LogOut icon
 } from "lucide-react";
+import { useMsal } from "@azure/msal-react"; // 🚀 Import MSAL
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -16,6 +18,24 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ active, onNavigate }) {
+  const { instance } = useMsal(); // 🚀 Hook into MSAL
+
+  const handleLogout = async () => {
+    try {
+      const backendUrl = import.meta.env.VITE_API_URL 
+        ? `https://${import.meta.env.VITE_API_URL}/api/auth/logout`
+        : "http://localhost:8000/api/auth/logout";
+
+      // 1. Tell FastAPI to destroy the cookie
+      await fetch(backendUrl, { method: "POST", credentials: "include" });
+      
+      // 2. Tell Microsoft to sign out locally
+      instance.logoutRedirect({ postLogoutRedirectUri: window.location.origin });
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
+
   return (
     <aside className="w-60 shrink-0 bg-gray-100 flex flex-col rounded-3xl sticky top-4 h-[calc(100vh-2rem)] self-start">
       <div className="px-5 py-4 flex items-center gap-2 ">
@@ -29,6 +49,7 @@ export default function Sidebar({ active, onNavigate }) {
       <span className="px-5 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex">
         Menu
       </span>
+      
       <nav className="flex-1 py-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -55,6 +76,17 @@ export default function Sidebar({ active, onNavigate }) {
           );
         })}
       </nav>
+
+      {/* 🚀 ADD THE LOGOUT BUTTON AT THE BOTTOM */}
+      <div className="p-4 mt-auto">
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 rounded-xl transition-colors cursor-pointer"
+        >
+          <LogOut className="w-4 h-4" />
+          Sign Out
+        </button>
+      </div>
     </aside>
   );
 }

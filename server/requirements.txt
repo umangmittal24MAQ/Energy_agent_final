@@ -23,3 +23,6 @@ schedule>=1.2.1
 playwright>=1.42.0
 email-validator
 pydantic[email]
+httpx
+msal 
+PyJWT[crypto]

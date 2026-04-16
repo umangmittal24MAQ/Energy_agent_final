@@ -12,8 +12,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from pathlib import Path
-from dotenv import load_dotenv
 
 from app.core.config import get_settings
 from app.core.logger import setup_logging, get_logger
@@ -30,7 +28,7 @@ load_dotenv(dotenv_path=ENV_PATH)
 async def lifespan(app: FastAPI):
     # --- PHASE A: Verify Environment Variables ---
     logger.info("\n" + "="*50)
-    logger.info("VERIFYING EMAIL ENVIRONMENT VARIABLES")
+    logger.info("VERIFYING ENVIRONMENT VARIABLES")
     logger.info("="*50)
     
     # Grab the variables
@@ -39,6 +37,11 @@ async def lifespan(app: FastAPI):
     email_from = os.getenv("EMAIL_FROM", "[MISSING]")
     operator_mail = os.getenv("OPERATOR_MAIL", "[MISSING]")  # For Ojas
     report_mail = os.getenv("REPORT_MAIL", "[MISSING]")      # For CEO
+    
+    # 🚀 NEW: Check Auth Variables
+    azure_client = os.getenv("AZURE_CLIENT_ID", "[MISSING]")
+    azure_tenant = os.getenv("AZURE_TENANT_ID", "[MISSING]")
+    session_secret = os.getenv("SESSION_SECRET", "[MISSING]")
     
     email_pwd = os.getenv("EMAIL_PASSWORD")
     if email_pwd:
@@ -52,11 +55,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"OPERATOR_MAIL : {operator_mail}")
     logger.info(f"REPORT_MAIL   : {report_mail}")
     logger.info(f"EMAIL_PASSWORD: {pwd_status}")
+    logger.info(f"AZURE_CLIENT_ID : {azure_client}")
+    logger.info(f"SESSION_SECRET  : {'[SET]' if session_secret != '[MISSING]' else '[MISSING]'}")
     
     if not email_pwd or email_from == "[MISSING]" or report_mail == "[MISSING]":
         logger.error("CRITICAL: Core email variables are missing. Automated emails WILL fail.")
+    elif azure_client == "[MISSING]" or session_secret == "[MISSING]":
+        logger.error("CRITICAL: Core authentication variables are missing. Logins WILL fail.")
     else:
-        logger.info("SUCCESS: All mail system variables loaded successfully.")
+        logger.info("SUCCESS: All mail and auth variables loaded successfully.")
     
     logger.info("="*50 + "\n")
 
@@ -93,6 +100,7 @@ def create_app() -> FastAPI:
     )
 
     # Add CORS middleware
+    # 🚨 CRITICAL FOR AUTH: allow_credentials MUST be True, and allowed_origins_list MUST NOT be ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
@@ -117,7 +125,12 @@ def create_app() -> FastAPI:
 
     # Include routers
     try:
-        from app.routes import data, kpis, export, scheduler, mail
+        # 🚀 NEW: Imported 'auth'
+        from app.routes import data, kpis, export, scheduler, mail, auth
+        
+        # 🚀 NEW: Added the auth router
+        app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+        
         app.include_router(data.router, prefix="/api")
         app.include_router(kpis.router, prefix="/api")
         app.include_router(mail.router, prefix="/api")

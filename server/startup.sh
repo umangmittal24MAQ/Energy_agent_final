@@ -8,7 +8,7 @@ cd $APP_DIR
 
 export PYTHONPATH=$APP_DIR:$PYTHONPATH
 
-#THE FIX: Force Playwright to save the browser in persistent storage!
+# Force Playwright to save the browser in persistent storage
 export PLAYWRIGHT_BROWSERS_PATH="/home/site/pw-browsers"
 
 # --- 1. Create the antenv if it does not exist ---
@@ -21,10 +21,9 @@ fi
 echo "Activating virtual environment..."
 source $VENV_DIR/bin/activate
 
-# --- 3. Install Dependencies (Using your flag logic) ---
+# --- 3. Install Dependencies ---
 if [ ! -f "/home/site/.deps_installed" ]; then
     echo "Installing dependencies into antenv for the first time..."
-    # 'python3' now points to the antenv python because it is activated
     python3 -m pip install --upgrade pip -q
     python3 -m pip install -r requirements.txt -q
 
@@ -34,11 +33,13 @@ else
     echo "Dependencies already installed, skipping pip install..."
 fi
 
-# --- 4. Install Playwright Browsers (Runs fast if already there) ---
-echo "Ensuring Playwright Chromium is installed in persistent storage..."
-# Because of the PLAYWRIGHT_BROWSERS_PATH variable, this will download
-# to /home/site/pw-browsers. If it's already there, this command finishes in 1 second!
+# --- 4. OS & Browser Dependencies ---
+echo "Ensuring Playwright Chromium is in persistent storage..."
 python3 -m playwright install chromium
+
+echo "Installing missing Linux OS system libraries..."
+# 🚀 THE FIX: This MUST run on every boot because Azure wipes the OS container!
+python3 -m playwright install-deps chromium
 
 # --- 5. Verify Application Exists ---
 if [ ! -d "app" ]; then
@@ -49,7 +50,6 @@ fi
 
 # --- 6. Boot the Server ---
 echo "Starting gunicorn with 1 worker..."
-# Running gunicorn while the venv is activated ensures it uses the venv packages
 python3 -m gunicorn app.api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
