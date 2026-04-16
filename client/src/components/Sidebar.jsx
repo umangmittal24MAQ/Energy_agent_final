@@ -37,16 +37,16 @@ export default function Sidebar({ active, onNavigate }) {
   };
 
   return (
-    <aside className="w-60 shrink-0 bg-gray-100 flex flex-col rounded-3xl sticky top-4 h-[calc(100vh-2rem)] self-start">
-      <div className="px-5 py-4 flex items-center gap-2 ">
+    <aside className="w-48 shrink-0 bg-gray-100 flex flex-col rounded-3xl sticky top-4 h-[calc(100vh-2rem)] self-start">
+      <div className="px-4 py-4 flex items-center gap-2 ">
         <div className="p-1 rounded-lg flex items-center justify-center">
           <DatabaseZap className=" text-blue-600" strokeWidth={2.5} />
         </div>
-        <span className="text-sm font-semibold text-slate-900 tracking-tight">
+        <span className="text-xs font-semibold text-slate-900 tracking-tight">
           Energy Dashboard
         </span>
       </div>
-      <span className="px-5 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex">
+      <span className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex">
         Menu
       </span>
       
@@ -58,7 +58,7 @@ export default function Sidebar({ active, onNavigate }) {
             <button
               key={item.key}
               onClick={() => onNavigate(item.key)}
-              className={`w-full relative flex items-center gap-2.5 px-5 py-2 cursor-pointer transition-all duration-200 ${
+              className={`w-full relative flex items-center gap-2 px-4 py-2 cursor-pointer transition-all duration-200 ${
                 isActive
                   ? " text-blue-700 font-medium bg-blue-50/50"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"

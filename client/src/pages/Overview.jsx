@@ -42,27 +42,34 @@ const CHART_COLORS = {
   savings: "#10b981",
 };
 
-function formatDateTick(dateStr) {
+function formatLongDate(dateStr) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+  return d.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function formatDateTick(dateStr) {
+  return formatLongDate(dateStr);
 }
 
 function formatNumber(v) {
   if (v == null) return "—";
-  return typeof v === "number"
-    ? v.toLocaleString("en-IN", { maximumFractionDigits: 1 })
-    : v;
+  const numeric = typeof v === "number" ? v : Number(v);
+  if (Number.isFinite(numeric)) {
+    return Math.ceil(numeric).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  }
+  return v;
 }
 
 function formatDateForTable(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return dateStr;
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = d.toLocaleString("en-IN", { month: "short" });
-  return `${day}-${month}-${d.getFullYear()}`;
+  return formatLongDate(dateStr);
 }
 
 function formatDayForTable(dateStr) {
@@ -100,24 +107,91 @@ function formatIssueText(value) {
   return `${lower.charAt(0).toUpperCase()}${lower.slice(1)}`;
 }
 
+function parseNumeric(value) {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const text = String(value);
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  const match = text.match(/[-+]?\d*\.?\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function normalizeRowDateKey(value) {
+  if (!value) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 const PAGE_SIZE = 15;
 
 export default function Overview() {
-  const { data: kpis, isLoading: kpisLoading, error: kpisError } = useKpis();
+  const currentDate = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const currentDateParam = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = String(currentDate.getMonth() + 1).padStart(2, "0");
+    const day = String(currentDate.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, [currentDate]);
+
+  const currentDateLabel = useMemo(
+    () =>
+      currentDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+    [currentDate],
+  );
+
+  const {
+    data: kpis,
+    isLoading: kpisLoading,
+    error: kpisError,
+  } = useKpis({
+    startDate: currentDateParam,
+    endDate: currentDateParam,
+  });
   const {
     data: unified,
     isLoading: dataLoading,
     error: dataError,
   } = useUnifiedData();
 
+  const sourceRows = unified?.data || [];
+
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
   const dateRange = unified?.date_range || null;
+  const dieselConsumedToday = useMemo(() => {
+    const todayRows = sourceRows.filter(
+      (row) => normalizeRowDateKey(row["Date"]) === currentDateParam,
+    );
+    if (todayRows.length === 0) return 0;
+    const total = todayRows.reduce(
+      (sum, row) => sum + parseNumeric(row["Diesel consumed"]),
+      0,
+    );
+    return Math.ceil(total);
+  }, [sourceRows, currentDateParam]);
+
   const chartData = useMemo(
     () =>
-      (unified?.data || []).map((row) => ({
+      sourceRows.map((row) => ({
         date: row["Date"],
         day: formatDayForTable(row["Date"]),
         time: formatTimeForTable(row["Time"]),
@@ -133,7 +207,7 @@ export default function Overview() {
         waterThroughWtp: row["Water treated through WTP"] ?? "",
         issues: row["Issues"] ?? "",
       })),
-    [unified],
+    [sourceRows],
   );
 
   const sorted = useMemo(() => {
@@ -179,7 +253,8 @@ export default function Overview() {
         {dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
-            {dateRange.min_date} — {dateRange.max_date}
+            {formatLongDate(dateRange.min_date)} —{" "}
+            {formatLongDate(dateRange.max_date)}
             <span className="bg-white rounded-xl px-2 border border-slate-200 ">
               {chartData.length} records
             </span>
@@ -194,6 +269,10 @@ export default function Overview() {
         </div>
       )}
 
+      <div className="mb-3 shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+        The Key Metrics shown below are of {currentDateLabel}
+      </div>
+
       {/* KPI Grid */}
       <div className="grid grid-cols-3 gap-4 shrink-0 mb-6">
         {kpisLoading ? (
@@ -201,7 +280,7 @@ export default function Overview() {
         ) : (
           <>
             <KpiCard
-              label="Total Units Consumed"
+              label="Total Units Consumed from all Energy Sources"
               value={kpis?.total_energy_kwh}
               unit="KWh"
               icon={Zap}
@@ -225,7 +304,7 @@ export default function Overview() {
               iconBg="bg-amber-50"
             />
             <KpiCard
-              label="Total Cost"
+              label="Total Cost Incurred"
               value={kpis?.total_cost_inr}
               unit="INR"
               icon={IndianRupee}
@@ -233,7 +312,7 @@ export default function Overview() {
               iconBg="bg-slate-100"
             />
             <KpiCard
-              label="Energy Saving"
+              label="Solar Cost Savings"
               value={kpis?.solar_savings_inr}
               unit="INR"
               icon={PiggyBank}
@@ -242,7 +321,7 @@ export default function Overview() {
             />
             <KpiCard
               label="Diesel Consumed"
-              value={kpis?.diesel_consumed_liters}
+              value={dieselConsumedToday}
               unit="L"
               icon={Fuel}
               accent="text-red-600"
@@ -276,7 +355,7 @@ export default function Overview() {
                 </div>
                 {dateRange && (
                   <span className="text-xs text-slate-400">
-                    as of {dateRange.max_date}
+                    as of {formatLongDate(dateRange.max_date)}
                   </span>
                 )}
               </div>
@@ -306,6 +385,7 @@ export default function Overview() {
                       }}
                     />
                     <Legend
+                      verticalAlign="top"
                       wrapperStyle={{
                         fontSize: 12,
                         paddingTop: 8,
@@ -351,7 +431,7 @@ export default function Overview() {
                 </div>
                 {dateRange && (
                   <span className="text-xs text-slate-400">
-                    as of {dateRange.max_date}
+                    as of {formatLongDate(dateRange.max_date)}
                   </span>
                 )}
               </div>
@@ -381,6 +461,7 @@ export default function Overview() {
                       }}
                     />
                     <Legend
+                      verticalAlign="top"
                       wrapperStyle={{
                         fontSize: 12,
                         paddingTop: 8,
@@ -498,7 +579,10 @@ export default function Overview() {
                       <td className="px-5 py-3 text-slate-700">{row.day}</td>
                       <td className="px-5 py-3 text-slate-700">{row.time}</td>
                       <td className="px-5 py-3 text-slate-700">
-                        {row.ambientTemperature || "—"}
+                        {row.ambientTemperature === "" ||
+                        row.ambientTemperature == null
+                          ? "—"
+                          : formatNumber(row.ambientTemperature)}
                       </td>
                       <td className="px-5 py-3 text-slate-700">
                         {formatNumber(row.grid)}

@@ -1,8 +1,12 @@
 function formatValue(value) {
   if (value == null) return "—";
-  return typeof value === "number"
-    ? value.toLocaleString("en-IN", { maximumFractionDigits: 1 })
-    : value;
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(numeric)) {
+    return Math.ceil(numeric).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  }
+  return value;
 }
 
 export default function KpiCard({

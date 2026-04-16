@@ -15,6 +15,23 @@ def _sum_col(df: pd.DataFrame, column_name: str) -> float:
         return float(pd.to_numeric(df[column_name], errors="coerce").fillna(0).sum())
     return 0.0
 
+
+def _sum_col_with_text_numeric(df: pd.DataFrame, column_name: str) -> float:
+    """Sums values from columns that may contain units like '3 Liter'."""
+    if column_name not in df.columns:
+        return 0.0
+
+    series = df[column_name]
+    numeric = pd.to_numeric(series, errors="coerce")
+
+    # Fallback for text values containing numeric tokens (e.g., '3 Liter').
+    if numeric.isna().any():
+        extracted = series.astype(str).str.extract(r"([-+]?\d*\.?\d+)", expand=False)
+        extracted_numeric = pd.to_numeric(extracted, errors="coerce")
+        numeric = numeric.fillna(extracted_numeric)
+
+    return float(numeric.fillna(0).sum())
+
 @router.get("/dashboard")
 async def get_dashboard_kpis(
     start_date: Optional[str] = Query(None),
@@ -34,5 +51,5 @@ async def get_dashboard_kpis(
         "total_energy_kwh": _sum_col(df, "Total Units Consumed (KWh)"),
         "total_cost_inr": _sum_col(df, "Total Units Consumed in INR"),
         "solar_savings_inr": _sum_col(df, "Energy Saving in INR"),
-        "diesel_consumed_liters": _sum_col(df, "Diesel consumed")
+        "diesel_consumed_liters": _sum_col_with_text_numeric(df, "Diesel consumed")
     }
