@@ -18,7 +18,8 @@ export default function App() {
   const [activePage, setActivePage] = useState("overview");
 
   const Page = PAGES[activePage];
-  const mainOverflowClass = activePage === "overview" ? "overflow-y-auto" : "overflow-hidden";
+  const mainOverflowClass =
+    activePage === "overview" ? "overflow-y-auto" : "overflow-hidden";
 
   return (
     <div className="flex m-4 gap-4 h-[calc(100vh-2rem)]">

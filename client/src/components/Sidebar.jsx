@@ -4,7 +4,7 @@ import {
   PlugZap,
   Fuel,
   CalendarClock,
-  LogOut // 🚀 Import the LogOut icon
+  LogOut, // 🚀 Import the LogOut icon
 } from "lucide-react";
 import { useMsal } from "@azure/msal-react"; // 🚀 Import MSAL
 import { BACKEND_ORIGIN } from "../lib/api";
@@ -26,9 +26,11 @@ export default function Sidebar({ active, onNavigate }) {
 
       // 1. Tell FastAPI to destroy the cookie
       await fetch(backendUrl, { method: "DELETE", credentials: "include" });
-      
+
       // 2. Tell Microsoft to sign out locally
-      instance.logoutRedirect({ postLogoutRedirectUri: window.location.origin });
+      instance.logoutRedirect({
+        postLogoutRedirectUri: window.location.origin,
+      });
     } catch (error) {
       console.error("Logout failed", error);
     }
@@ -38,15 +40,21 @@ export default function Sidebar({ active, onNavigate }) {
     <aside className="w-48 shrink-0 bg-gray-100 flex flex-col rounded-3xl sticky top-4 h-[calc(100vh-2rem)] self-start">
       <div className="px-4 py-4 border-b border-slate-200">
         <div className="flex items-baseline gap-1 leading-none">
-          <span className="text-2xl font-extrabold tracking-tight text-red-600">MAQ</span>
-          <span className="text-2xl font-medium tracking-tight text-slate-600">Software</span>
+          <span className="text-2xl font-extrabold tracking-tight text-red-600">
+            MAQ
+          </span>
+          <span className="text-2xl font-medium tracking-tight text-slate-600">
+            Software
+          </span>
         </div>
-        <p className="mt-2 text-xs font-semibold text-slate-500 tracking-tight">Energy Dashboard</p>
+        <p className="mt-2 text-xs font-semibold text-slate-500 tracking-tight">
+          Energy Dashboard
+        </p>
       </div>
       <span className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider flex">
         Menu
       </span>
-      
+
       <nav className="flex-1 py-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -76,7 +84,7 @@ export default function Sidebar({ active, onNavigate }) {
 
       {/* 🚀 ADD THE LOGOUT BUTTON AT THE BOTTOM */}
       <div className="p-4 mt-auto">
-        <button 
+        <button
           onClick={handleLogout}
           className="w-full flex items-center gap-2.5 px-5 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700 rounded-xl transition-colors cursor-pointer"
         >
