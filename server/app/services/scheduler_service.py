@@ -239,29 +239,97 @@ def build_energy_report_html(df: pd.DataFrame) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 # Core Automation Dispatches
 # ──────────────────────────────────────────────────────────────────────────────
-# REPLACE WITH THIS
-def _run_master_data_engine() -> Dict[str, Any]:
-    """Runs the Master Data merge in an isolated subprocess to prevent memory leaks."""
+def _run_master_data_engine_once(
+    operator_date: str,
+    solar_date: str,
+    fallback_operator_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run one isolated master-data merge cycle."""
+    backend_root = Path(__file__).parent.parent.parent
+    command = [
+        sys.executable,
+        "-m",
+        "app.agents.master_data_engine",
+        operator_date,
+        solar_date,
+    ]
+    if fallback_operator_date:
+        command.append(fallback_operator_date)
+
     try:
-        IST = ZoneInfo("Asia/Kolkata")
-        now = datetime.now(IST)
-        operator_date = now.strftime("%Y-%m-%d")                        # TODAY   e.g. 2026-04-13
-        solar_date    = (now - timedelta(days=1)).strftime("%Y-%m-%d")  # YESTERDAY e.g. 2026-04-12
-
-        logger.info(f"Master data engine: operator_date={operator_date}, solar_date={solar_date}")
-
-        backend_root = Path(__file__).parent.parent.parent
-        subprocess.run(
-            [sys.executable, "-m", "app.agents.master_data_engine", operator_date, solar_date],
+        logger.info(
+            "Master data engine run: operator_date=%s, solar_date=%s, fallback_operator_date=%s",
+            operator_date,
+            solar_date,
+            fallback_operator_date,
+        )
+        result = subprocess.run(
+            command,
             cwd=str(backend_root),
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
+        if result.stdout:
+            logger.info(result.stdout.strip())
         return {"status": "Success"}
     except subprocess.CalledProcessError as exc:
         logger.error(f"Master data engine subprocess failed: {exc.stderr}")
         return {"status": "Failed", "error": str(exc.stderr)}
+
+
+def _run_master_data_engine() -> Dict[str, Any]:
+    """Runs the Master Data merge in isolated subprocesses to prevent memory leaks."""
+    IST = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(IST)
+    operator_today = now.strftime("%Y-%m-%d")
+    solar_yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    run_specs = [
+        {
+            "operator_date": operator_today,
+            "solar_date": solar_yesterday,
+            "fallback_operator_date": None,
+        }
+    ]
+
+    if now.weekday() == 0:
+        sunday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        # Monday catch-up: write one row for Sunday plus the regular Monday row.
+        run_specs = [
+            {
+                "operator_date": sunday,
+                "solar_date": sunday,
+                "fallback_operator_date": operator_today,
+            },
+            {
+                "operator_date": operator_today,
+                "solar_date": solar_yesterday,
+                "fallback_operator_date": None,
+            },
+        ]
+        logger.info("Monday detected. Running two master-data writes (Sunday catch-up + Monday run).")
+
+    failures = []
+    for spec in run_specs:
+        result = _run_master_data_engine_once(
+            spec["operator_date"],
+            spec["solar_date"],
+            spec.get("fallback_operator_date"),
+        )
+        if result.get("status") != "Success":
+            failures.append(
+                {
+                    "operator_date": spec["operator_date"],
+                    "solar_date": spec["solar_date"],
+                    "error": result.get("error", "Unknown failure"),
+                }
+            )
+
+    if failures:
+        return {"status": "Failed", "error": "Master Engine subprocess failure", "details": failures}
+
+    return {"status": "Success", "runs": len(run_specs)}
 
 def _run_solar_scraper() -> None:
     """Runs the SuryaLogix scraper every 30 minutes as a completely isolated subprocess."""
@@ -319,9 +387,10 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
     
     IST = ZoneInfo("Asia/Kolkata")
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    should_lock_tracker = trigger_source != "api_manual"
 
     # 1. Did Ojas upload early? Check the tracker.
-    if _daily_report_tracker.get(today_str, False):
+    if should_lock_tracker and _daily_report_tracker.get(today_str, False):
         logger.info("10:30 AM Deadline reached, but the report was already sent early today. Skipping!")
         return {"status": "Skipped", "notes": "Report already sent today"}
 
@@ -333,15 +402,21 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
         
         if engine_result["status"] == "Success":
             result = send_daily_report(trigger_source=trigger_source, is_missing_data=False)
-            _daily_report_tracker[today_str] = True  # Lock the tracker
+            if should_lock_tracker:
+                _daily_report_tracker[today_str] = True  # Lock the tracker
             return result
         else:
-            return {"status": "Error", "notes": "Master Engine Failed"}
+            logger.error("Master Engine failed. Sending fallback report from existing master data.")
+            result = send_daily_report(trigger_source="engine_failed_fallback", is_missing_data=False)
+            if should_lock_tracker:
+                _daily_report_tracker[today_str] = True  # Lock the tracker
+            return result
     else:
         # Operator forgot to submit data by 10:30 AM. 
         logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
         result = send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
-        _daily_report_tracker[today_str] = True  # Lock the tracker
+        if should_lock_tracker:
+            _daily_report_tracker[today_str] = True  # Lock the tracker
         return result
 
 def _run_operator_reminder_cycle():
@@ -501,4 +576,6 @@ def initialize_scheduler_from_config() -> None:
     # 3. Start Daily Email Clocks
     cfg = load_scheduler_config()
     if cfg.get("auto_start", False):
-        _schedule_daily_job(cfg.get("send_time", DAILY_REPORT_CRON_TIME))
+        _schedule_daily_job(
+            cfg.get("start_time", cfg.get("send_time", DAILY_REPORT_CRON_TIME))
+        )

@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 from app.services import email_service
+from app.services.scheduler_service import run_daily_report_automation
 from app.core.logger import logger
 
 router = APIRouter(prefix="/mail", tags=["Mail Service"])
@@ -22,7 +23,7 @@ async def trigger_manual_report(background_tasks: BackgroundTasks):
     Runs in the background to prevent the API from hanging.
     """
     logger.info("Manual daily report triggered via API.")
-    background_tasks.add_task(email_service.send_daily_report, trigger_source="api_manual")
+    background_tasks.add_task(run_daily_report_automation, trigger_source="api_manual")
     return {"message": "Daily report generation started in background."}
 
 @router.post("/test-connection")

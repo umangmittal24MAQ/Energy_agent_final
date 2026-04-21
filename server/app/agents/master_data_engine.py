@@ -161,7 +161,11 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
     return default
 
 # REPLACE WITH THIS
-def process_master_data(operator_date: str, solar_date: str) -> None:
+def process_master_data(
+    operator_date: str,
+    solar_date: str,
+    fallback_operator_date: Optional[str] = None,
+) -> None:
     logger.info(f"=== Master Data Engine: operator_date={operator_date}, solar_date={solar_date} ===")
         
     # 1. Download BOTH source files
@@ -178,6 +182,18 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     # 3. Filter for the target date
     grid_rows  = df_grid[df_grid['Date'] == operator_date]   # operator wrote today's date
     solar_rows = df_solar[df_solar['Date'] == solar_date]    # scraper ran on yesterday
+
+    grid_source_date = operator_date
+    if grid_rows.empty and fallback_operator_date:
+        fallback_rows = df_grid[df_grid['Date'] == fallback_operator_date]
+        if not fallback_rows.empty:
+            grid_rows = fallback_rows
+            grid_source_date = fallback_operator_date
+            logger.warning(
+                "No operator row found for %s. Using fallback operator row from %s.",
+                operator_date,
+                fallback_operator_date,
+            )
 
     # Take the last solar row at or before 19:30 — that's the true daily peak
     solar_rows_peak = solar_rows[solar_rows['Time'] <= '19:30']
@@ -221,6 +237,8 @@ def process_master_data(operator_date: str, solar_date: str) -> None:
     energy_savings_inr = solar_units * GRID_RATE
     
     logger.info(f"   Grid Units: {grid_units} kWh")
+    if grid_source_date != operator_date:
+        logger.info(f"   Grid source row date (fallback): {grid_source_date}")
     logger.info(f"   Solar Units: {solar_units} kWh (Source: {solar_source})")
     logger.info(f"   Calculated Total Units: {total_units} kWh")
     logger.info(f"   Grid Cost (INR): ₹{grid_cost_inr:,.2f}")
@@ -277,9 +295,11 @@ if __name__ == "__main__":
     now = datetime.now(IST)
     # argv[1] = operator_date (TODAY)      e.g. 2026-04-13
     # argv[2] = solar_date    (YESTERDAY)  e.g. 2026-04-12
+    # argv[3] = fallback_operator_date      e.g. 2026-04-13
     operator_date = sys.argv[1] if len(sys.argv) > 1 else now.strftime("%Y-%m-%d")
     solar_date    = sys.argv[2] if len(sys.argv) > 2 else (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    try: process_master_data(operator_date, solar_date)
+    fallback_operator_date = sys.argv[3] if len(sys.argv) > 3 else None
+    try: process_master_data(operator_date, solar_date, fallback_operator_date)
     except Exception as e:
         logger.error(f"❌ Master Engine Failed: {e}")
         sys.exit(1)

@@ -5,6 +5,7 @@ import {
   updateSchedulerConfig,
   fetchSchedulerStatus,
   fetchSchedulerHistory,
+  stopSchedulerApi,
 } from "../lib/api";
 import {
   CalendarClock,
@@ -145,7 +146,8 @@ export default function Scheduler() {
 
   async function refreshSchedulerStatus() {
     const status = await fetchSchedulerStatus();
-    setIsSchedulerRunning(true);
+    const running = String(status?.status || "").toLowerCase() === "running";
+    setIsSchedulerRunning(running);
     setNextRunLabel(status?.next_run ? formatDateTime(status.next_run) : "—");
     return status;
   }
@@ -169,7 +171,7 @@ export default function Scheduler() {
   useEffect(() => {
     async function loadScheduler() {
       try {
-        const [config] = await Promise.all([
+        const [config, status] = await Promise.all([
           fetchSchedulerConfig(),
           refreshSchedulerStatus(),
           refreshSchedulerHistory(),
@@ -204,7 +206,9 @@ export default function Scheduler() {
           setConfiguredIntervalMinutes(explicitInterval);
         }
 
-        setIsSchedulerRunning(true);
+        setIsSchedulerRunning(
+          String(status?.status || "").toLowerCase() === "running",
+        );
         setNowTick(Date.now());
       } catch {
         // Keep form defaults if scheduler config/status fetch fails.
@@ -254,7 +258,7 @@ export default function Scheduler() {
     return {
       to: recipients.filter(Boolean).join(","),
       cc: cc.filter(Boolean).join(","),
-      send_time: startTime,
+      start_time: startTime,
       subject,
       auto_start:
         autoStartOverride == null ? isSchedulerRunning : autoStartOverride,
@@ -316,12 +320,22 @@ export default function Scheduler() {
     setErrorMsg(null);
 
     try {
+      const synced = await persistConfiguration({
+        showSuccess: false,
+        autoStartOverride: true,
+      });
+      if (!synced) {
+        return;
+      }
+
       await sendTestEmail();
 
       await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
       setNowTick(Date.now());
 
-      setSuccessMsg("Email sent successfully to " + toList.join(", "));
+      setSuccessMsg(
+        "Email trigger accepted. Check Send History for final delivery status.",
+      );
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
       await Promise.all([
@@ -341,10 +355,16 @@ export default function Scheduler() {
     setErrorMsg(null);
 
     try {
+      const stopResult = await stopSchedulerApi();
       await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
       setNowTick(Date.now());
-      setIsSchedulerRunning(true);
-      setSuccessMsg("Scheduler remains running.");
+
+      const running =
+        String(stopResult?.status || "").toLowerCase() === "running";
+      setIsSchedulerRunning(running);
+      setSuccessMsg(
+        running ? "Scheduler is still running." : "Scheduler stopped.",
+      );
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err) {
       setErrorMsg(err.message || "Failed to stop scheduler");

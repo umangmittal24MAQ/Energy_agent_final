@@ -4,6 +4,7 @@ Email service for sending energy reports and notifications.
 import io
 import os
 import re
+import json
 import smtplib
 import logging
 import html as html_lib
@@ -13,7 +14,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 from zoneinfo import ZoneInfo
 
@@ -50,10 +51,38 @@ def normalizeIssueText(value: Any) -> str:
     if not text: return "No issues"
     return text.lower()[:1].upper() + text.lower()[1:]
 
+
+def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
+    """Append one send-history record to scheduler_log.json without affecting mail flow."""
+    try:
+        from app.services.scheduler_service import SCHEDULER_LOG_FILE
+
+        SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        history: list[Dict[str, Any]] = []
+
+        if SCHEDULER_LOG_FILE.exists():
+            try:
+                with open(SCHEDULER_LOG_FILE, "r", encoding="utf-8") as f:
+                    payload = json.load(f)
+                if isinstance(payload, list):
+                    history = payload
+            except Exception:
+                history = []
+
+        history.append(entry)
+        with open(SCHEDULER_LOG_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+    except Exception as exc:
+        logger.warning(f"Failed to append scheduler history entry: {exc}")
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
 # ──────────────────────────────────────────────────────────────────────────────
 def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[str] = None, is_missing_data: bool = False) -> Dict[str, Any]:
+    subject = ""
+    attachment_name: Optional[str] = None
+    all_recipients: list[str] = []
+
     try:
         from app.services.sharepoint_data_service import get_service as get_excel_service
         from app.services.scheduler_service import load_scheduler_config
@@ -64,40 +93,64 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         sched_config = load_scheduler_config()
         sp_service = get_excel_service()
         master_df = sp_service.fetch_sheet_data("master_data")
+
+        operator_email_preview = str(sched_config.get("to", "")).strip()
+        cc_preview = str(sched_config.get("cc", "")).strip()
+        all_recipients = [e.strip() for e in f"{operator_email_preview},{cc_preview}".split(",") if e.strip()]
+        subject = sched_config.get("subject", "Daily Energy Report - Noida Campus - {date}")
+
+        if not all_recipients:
+            _append_scheduler_send_history(
+                {
+                    "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                    "status": "Failed",
+                    "kind": "daily_report",
+                    "trigger_source": trigger_source,
+                    "subject": subject,
+                    "recipients": "",
+                    "attachment": None,
+                    "notes": "No recipients configured in scheduler settings",
+                }
+            )
+            return {"status": "Failed", "notes": "No recipients configured in scheduler settings"}
         
         if master_df is None or master_df.empty:
+            _append_scheduler_send_history(
+                {
+                    "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                    "status": "Failed",
+                    "kind": "daily_report",
+                    "trigger_source": trigger_source,
+                    "subject": subject,
+                    "recipients": ", ".join(all_recipients),
+                    "attachment": None,
+                    "notes": "Master data is empty",
+                }
+            )
             return {"status": "Failed", "notes": "Master data is empty"}
 
-        today = datetime.today()
-        report_dates = []
+        today = datetime.now(ZoneInfo("Asia/Kolkata"))
+        report_date_title = today.strftime("%Y-%m-%d")
 
-        # --- 1. DETERMINE DATES (WITH MONDAY LOGIC) ---
+        # --- 1. DETERMINE SINGLE REPORT DATE ---
         if manual_date:
-            row_df = master_df[master_df['Date'] == manual_date]
-            if not row_df.empty:
-                report_dates.append(str(row_df.iloc[-1].get("Date")))
             report_date_title = manual_date
-        else:
-            if today.weekday() == 0:  # 0 is Monday
-                logger.info("Monday detected. Fetching the last 2 rows for the weekend summary.")
-                # Safely grab the last 2 rows
-                weekend_rows = master_df.tail(2)
-                report_dates = [str(row.get("Date")) for _, row in weekend_rows.iterrows()]
-                
-                # Format the title depending on if we actually got 2 rows
-                if len(report_dates) > 1:
-                    report_date_title = f"{report_dates[0]} & {report_dates[1]}"
+        elif "Date" in master_df.columns:
+            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+            today_mask = parsed_dates.dt.date == today.date()
+            if today_mask.any():
+                report_date_title = str(master_df.loc[today_mask].iloc[-1].get("Date", report_date_title))
+            elif today.weekday() == 0:
+                sunday_date = (today - timedelta(days=1)).date()
+                sunday_mask = parsed_dates.dt.date == sunday_date
+                if sunday_mask.any():
+                    report_date_title = str(master_df.loc[sunday_mask].iloc[-1].get("Date", report_date_title))
                 else:
-                    report_date_title = report_dates[0] if report_dates else today.strftime("%Y-%m-%d")
+                    report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
             else:
-                day_data = master_df.iloc[-1].to_dict()
-                single_date = str(day_data.get("Date", today.strftime("%Y-%m-%d")))
-                report_dates.append(single_date)
-                report_date_title = single_date
-
-        if not report_dates:
-            report_dates = [today.strftime("%Y-%m-%d")]
-            report_date_title = report_dates[0]
+                report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
+        else:
+            report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
 
         # --- 2. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
@@ -112,29 +165,32 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             warning_msg = ""
             subject_prefix = ""
 
-        # --- 3. INJECT HTML (LOOPING FOR MULTIPLE DAYS) ---
+        # --- 3. INJECT HTML FOR THE SELECTED DATE ---
         try:
-            html_parts = []
-            for i, r_date in enumerate(report_dates):
-                # Ensure the red warning box only prints on the very first table
-                current_warning = warning_msg if i == 0 else ""
-                part_html = _build_strict_email_html(master_df, r_date, custom_message=current_warning)
-                html_parts.append(part_html)
-            
-            # Stack the days with a dashed separator if there are multiple
-            if len(html_parts) > 1:
-                separator = "<br><br><hr style='border: 1px dashed #cccccc; margin: 20px 0;'><br><br>"
-                body_html = separator.join(html_parts)
-            else:
-                body_html = html_parts[0]
+            body_html = _build_strict_email_html(master_df, report_date_title, custom_message=warning_msg)
         except Exception as e:
             logger.error(f"HTML generation failed: {e}")
             body_html = f"<p>Report generated for {report_date_title}, but HTML formatting failed.</p>"
 
         # --- 4. ATTACHMENT AND EMAIL SENDING ---
         try:
-            attachment_bytes = _generate_excel_attachment(master_df)
-            attachment_name = f"Energy_Report_{datetime.today().strftime('%Y%m%d')}.xlsx"
+            attachment_df = master_df
+            if "Date" in master_df.columns:
+                target_date = pd.to_datetime(report_date_title, errors="coerce")
+                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+                if pd.notna(target_date):
+                    day_rows = master_df[parsed_dates.dt.date == target_date.date()]
+                    if not day_rows.empty:
+                        attachment_df = day_rows
+
+            attachment_bytes = _generate_excel_attachment(attachment_df)
+            parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce")
+            attachment_suffix = (
+                parsed_attachment_date.strftime("%Y%m%d")
+                if pd.notna(parsed_attachment_date)
+                else datetime.today().strftime("%Y%m%d")
+            )
+            attachment_name = f"Energy_Report_{attachment_suffix}.xlsx"
         except Exception as e:
             logger.error(f"Attachment generation failed: {e}")
             attachment_bytes = None
@@ -145,28 +201,19 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
 
-        operator_email = sched_config.get("to", os.getenv("REPORT_EMAIL", "umang.mittal@maqsoftware.com"))
-        cc_emails_str = sched_config.get("cc", "")
+        operator_email = str(sched_config.get("to", "")).strip()
+        cc_emails_str = str(sched_config.get("cc", "")).strip()
         
         to_list = [e.strip() for e in operator_email.split(',') if e.strip()]
         cc_list = [e.strip() for e in cc_emails_str.split(',') if e.strip()]
         all_recipients = to_list + cc_list
         
-        # Base subject dynamically uses the new report_date_title (e.g., "Date1 & Date2")
-        # Fetch the subject from config, or use default
-        # --- 1. Format the Subject Date to 'Month DD, YYYY' ---
+        # --- 1. Format the Subject Date to current day (or manual override) ---
         try:
-            if "&" not in report_date_title:
-                # Standard single day
-                subject_date_str = pd.to_datetime(report_date_title).strftime("%B %d, %Y").replace(" 0", " ")
-            else:
-                # Handles the Monday weekend-fetch (e.g. "April 13, 2026 & April 14, 2026")
-                d1, d2 = report_date_title.split(" & ")
-                fd1 = pd.to_datetime(d1.strip()).strftime("%B %d, %Y").replace(" 0", " ")
-                fd2 = pd.to_datetime(d2.strip()).strftime("%B %d, %Y").replace(" 0", " ")
-                subject_date_str = f"{fd1} & {fd2}"
+            subject_date_source = manual_date or today.strftime("%Y-%m-%d")
+            subject_date_str = pd.to_datetime(subject_date_source).strftime("%B %d, %Y").replace(" 0", " ")
         except Exception:
-            subject_date_str = report_date_title
+            subject_date_str = today.strftime("%B %d, %Y").replace(" 0", " ")
 
         # --- 2. Inject Date and Clean Encoding ---
         raw_subject = sched_config.get("subject", "Daily Energy Report - Noida Campus - {date}")
@@ -193,11 +240,37 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             server.login(email_from, sender_password)
             server.sendmail(email_from, all_recipients, msg.as_string())
 
+        _append_scheduler_send_history(
+            {
+                "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                "status": "Success",
+                "kind": "daily_report",
+                "trigger_source": trigger_source,
+                "subject": subject,
+                "recipients": ", ".join(all_recipients),
+                "attachment": attachment_name,
+                "notes": "Daily report email sent",
+            }
+        )
+
         return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
 
     except Exception as e:
         from app.core.logger import logger
         logger.error(f"Failed to send daily report: {e}")
+
+        _append_scheduler_send_history(
+            {
+                "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                "status": "Failed",
+                "kind": "daily_report",
+                "trigger_source": trigger_source,
+                "subject": subject,
+                "recipients": ", ".join(all_recipients),
+                "attachment": attachment_name,
+                "notes": str(e),
+            }
+        )
         return {"status": "Failed", "error": str(e)}
 
 def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message: str = "") -> str:
