@@ -168,6 +168,17 @@ export default function Scheduler() {
     return sortedEntries;
   }
 
+  async function waitForSendHistoryUpdate(previousTopTimestamp) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const latestEntries = await refreshSchedulerHistory();
+      const latestTimestamp = latestEntries?.[0]?.timestamp || null;
+      if (latestTimestamp && latestTimestamp !== previousTopTimestamp) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+
   useEffect(() => {
     async function loadScheduler() {
       try {
@@ -314,6 +325,7 @@ export default function Scheduler() {
   async function handleSendNow() {
     const toList = recipients.filter(Boolean);
     if (toList.length === 0) return;
+    const previousTopTimestamp = sendHistory?.[0]?.timestamp || null;
 
     setSending(true);
     setSuccessMsg(null);
@@ -331,6 +343,7 @@ export default function Scheduler() {
       await sendTestEmail();
 
       await Promise.all([refreshSchedulerStatus(), refreshSchedulerHistory()]);
+      await waitForSendHistoryUpdate(previousTopTimestamp);
       setNowTick(Date.now());
 
       setSuccessMsg(

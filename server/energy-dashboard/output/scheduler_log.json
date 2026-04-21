@@ -270,5 +270,35 @@
     "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
     "attachment": "Energy_Report_20260420.xlsx",
     "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:35:06.159127+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:35:29.046118+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:47:35.087100+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
   }
 ]
