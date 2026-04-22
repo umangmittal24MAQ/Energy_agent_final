@@ -160,6 +160,29 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
             return val
     return default
 
+
+def _get_peak_automated_solar_units(solar_rows: pd.DataFrame) -> float:
+    """Return the peak cumulative automated solar units for the day."""
+    if solar_rows is None or solar_rows.empty:
+        return 0.0
+
+    candidate_rows = solar_rows
+    if "Time" in solar_rows.columns:
+        parsed_times = pd.to_datetime(solar_rows["Time"], errors="coerce").dt.strftime("%H:%M")
+        upto_1930 = solar_rows[parsed_times.notna() & (parsed_times <= "19:30")]
+        if not upto_1930.empty:
+            candidate_rows = upto_1930
+
+    solar_candidates = candidate_rows.apply(
+        lambda row: _safe_float(_get_fuzzy(row, "daygeneration", _get_fuzzy(row, "solar", 0))),
+        axis=1,
+    )
+
+    if solar_candidates.empty:
+        return 0.0
+
+    return float(solar_candidates.max())
+
 # REPLACE WITH THIS
 def process_master_data(
     operator_date: str,
@@ -195,11 +218,6 @@ def process_master_data(
                 fallback_operator_date,
             )
 
-    # Take the last solar row at or before 19:30 — that's the true daily peak
-    solar_rows_peak = solar_rows[solar_rows['Time'] <= '19:30']
-    if solar_rows_peak.empty:
-        solar_rows_peak = solar_rows  # fallback: use whatever rows exist
-
     if grid_rows.empty:
         logger.error(f"❌ No Operator Grid/Diesel data found for {operator_date}. Aborting.")
         return
@@ -212,15 +230,26 @@ def process_master_data(
     
     # 5. Extract Solar Data (WITH SMART FALLBACK)
     automated_solar_units = 0.0
-    if not solar_rows_peak.empty:
-        solar_today = solar_rows_peak.iloc[-1]
-        automated_solar_units = _safe_float(_get_fuzzy(solar_today, "daygeneration", _get_fuzzy(solar_today, "solar", 0)))
+    if not solar_rows.empty:
+        automated_solar_units = _get_peak_automated_solar_units(solar_rows)
     else:
         logger.warning(f"No Automated Solar data found for {solar_date} in UnifiedSolarData.")
 
     manual_solar_units = _safe_float(_get_fuzzy(grid_today, "solar", 0))
 
-    if automated_solar_units > 0:
+    if automated_solar_units > 0 and manual_solar_units > 0:
+        if manual_solar_units > automated_solar_units:
+            logger.warning(
+                "Automated solar (%s kWh) is lower than manual operator entry (%s kWh). Using manual value.",
+                automated_solar_units,
+                manual_solar_units,
+            )
+            solar_units = manual_solar_units
+            solar_source = "Manual Override"
+        else:
+            solar_units = automated_solar_units
+            solar_source = "Automated Scraper"
+    elif automated_solar_units > 0:
         solar_units = automated_solar_units
         solar_source = "Automated Scraper"
     elif manual_solar_units > 0:

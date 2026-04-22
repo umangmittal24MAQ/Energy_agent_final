@@ -298,7 +298,8 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
         
         true_date = row["_parsed_date"]
         display_date = true_date.strftime("%d-%b-%Y")
-        display_day = true_date.strftime("%A")
+        master_day = str(safe_row.get("Day", "")).strip()
+        display_day = master_day if master_day else true_date.strftime("%A")
 
         raw_time = safe_row.get("Time", "")
         try:
