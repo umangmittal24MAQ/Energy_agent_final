@@ -826,10 +826,9 @@ export default function Scheduler({
             {/* ADDED: Compact 3-column send history layout with explicit widths for proper alignment. */}
             <table className="energy-table w-full text-xs text-left table-fixed">
               <colgroup>
-                <col className="w-[28%]" />
-                <col className="w-[18%]" />
-                <col className="w-[18%]" />
-                <col className="w-[36%]" />
+                <col className="w-[38%]" />
+                <col className="w-[22%]" />
+                <col className="w-[40%]" />
               </colgroup>
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
@@ -838,9 +837,6 @@ export default function Scheduler({
                   </th>
                   <th className="px-3 py-2 font-semibold text-slate-500 text-left whitespace-nowrap align-middle">
                     Status
-                  </th>
-                  <th className="px-3 py-2 font-semibold text-slate-500 text-left whitespace-nowrap align-middle">
-                    Triggered By
                   </th>
                   <th className="px-3 py-2 font-semibold text-slate-500 text-left whitespace-nowrap align-middle">
                     Recipients (To)
@@ -868,17 +864,6 @@ export default function Scheduler({
                         }`}
                       >
                         {entry.status || "—"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`text-[10px] uppercase font-bold tracking-wide px-2 py-1 rounded-full inline-flex ${
-                          getTriggerLabel(entry) === "Manual"
-                            ? "bg-blue-50 text-blue-600 border border-blue-100"
-                            : "bg-violet-50 text-violet-600 border border-violet-100"
-                        }`}
-                      >
-                        {getTriggerLabel(entry)}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-slate-700 align-top whitespace-normal break-all">
