@@ -53,6 +53,7 @@ def normalizeIssueText(value: Any) -> str:
     return text.lower()[:1].upper() + text.lower()[1:]
 
 
+<<<<<<< HEAD
 REMINDER_TO_DISPLAY = [
     "Parag Kulshrestha | MAQ Software <paragk@maqsoftware.com>",
     "Shailesh | MAQ Software <shaileshl@maqsoftware.com>",
@@ -63,6 +64,7 @@ REMINDER_CC_DISPLAY = [
     "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>",
     "Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>",
     "Ishita Singh | MAQ Software <ishitas@maqsoftware.com>",
+    "Umang Mittal | MAQ SOftware <umang.mittal@maqsoftware.com>"
 ]
 
 
@@ -93,6 +95,84 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
             json.dump(history, f, indent=2)
     except Exception as exc:
         logger.warning(f"Failed to append scheduler history entry: {exc}")
+=======
+def _normalize_col_name(name: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+
+def _find_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
+    wanted = {_normalize_col_name(c) for c in candidates}
+    for col in df.columns:
+        if _normalize_col_name(col) in wanted:
+            return col
+    return None
+
+
+def _compute_yesterday_generation_for_email(sp_service: Any) -> Optional[float]:
+    """
+    Compare two UnifiedSolarData values and return the higher one:
+    1) Today's "Yesterday Gen"
+    2) Yesterday's final "Day Generation (kWh)"
+    """
+    try:
+        unified_df = sp_service.fetch_sheet_data("unified_solar")
+        if unified_df is None or unified_df.empty:
+            logger.warning("UnifiedSolarData is empty; cannot compute Yesterday Generation override.")
+            return None
+
+        df = unified_df.copy()
+        date_col = _find_column(df, ["Date"])
+        if not date_col:
+            logger.warning("Date column not found in UnifiedSolarData; cannot compute Yesterday Generation override.")
+            return None
+
+        ygen_col = _find_column(
+            df,
+            [
+                "Yesterday Gen",
+                "Yesterday Generation (kWh)",
+                "Yesterday Generation",
+                "YesterdayGen",
+            ],
+        )
+        daygen_col = _find_column(
+            df,
+            ["Day Generation (kWh)", "DayGeneration", "Day Generation"],
+        )
+        time_col = _find_column(df, ["Time"])
+
+        parsed_date = pd.to_datetime(df[date_col], errors="coerce").dt.date
+        parsed_time = pd.to_datetime(df[time_col], errors="coerce") if time_col else pd.Series(pd.NaT, index=df.index)
+
+        ist_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        ist_yesterday = ist_today - timedelta(days=1)
+
+        val_today_ygen = 0.0
+        if ygen_col:
+            today_rows = df[parsed_date == ist_today].copy()
+            if not today_rows.empty:
+                today_rows["_t"] = parsed_time.loc[today_rows.index]
+                today_rows = today_rows.sort_values("_t")
+                val_today_ygen = _num(today_rows.iloc[-1].get(ygen_col), 0.0)
+
+        val_yday_final_daygen = 0.0
+        if daygen_col:
+            yday_rows = df[parsed_date == ist_yesterday].copy()
+            if not yday_rows.empty:
+                yday_rows["_t"] = parsed_time.loc[yday_rows.index]
+                yday_rows = yday_rows.sort_values("_t")
+                val_yday_final_daygen = _num(yday_rows.iloc[-1].get(daygen_col), 0.0)
+
+        selected = max(val_today_ygen, val_yday_final_daygen)
+        logger.info(
+            f"Yesterday Generation compare: today[YGen]={val_today_ygen}, "
+            f"yesterday[final DayGen]={val_yday_final_daygen}, selected={selected}"
+        )
+        return round(selected, 2)
+    except Exception as e:
+        logger.warning(f"Failed computing Yesterday Generation override: {e}")
+        return None
+>>>>>>> 40f20ea (update)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
@@ -170,6 +250,27 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
                 report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
         else:
             report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
+
+        # --- 1.5 OVERRIDE YESTERDAY GENERATION FOR EMAIL CONTENT ---
+        selected_yesterday_gen = _compute_yesterday_generation_for_email(sp_service)
+        if selected_yesterday_gen is not None:
+            if "Yesterday Generation (kWh)" not in master_df.columns:
+                master_df["Yesterday Generation (kWh)"] = ""
+
+            parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
+            updated_any = False
+            for r_date in report_dates:
+                r_date_obj = pd.to_datetime(r_date, errors="coerce")
+                if pd.isna(r_date_obj):
+                    continue
+                mask = parsed_master_dates == r_date_obj.date()
+                if mask.any():
+                    master_df.loc[mask, "Yesterday Generation (kWh)"] = selected_yesterday_gen
+                    updated_any = True
+
+            # Safety fallback: if report date row was not found, update the latest row shown.
+            if not updated_any and not master_df.empty:
+                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = selected_yesterday_gen
 
         # --- 2. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
@@ -331,6 +432,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
             "Day":                                     display_day,
             "Time":                                    clean_time,
             "Ambient Temperature (°C)":                safe_row.get("Ambient Temperature °C", ""),
+            "Yesterday Generation (kWh)":              safe_row.get("Yesterday Generation (kWh)", ""),
             "Grid Units Consumed (kWh)":               safe_row.get("Grid Units Consumed (KWh)", ""),
             "Solar Units Consumed (kWh)":              safe_row.get("Solar Units Consumed(KWh)", ""),
             "Total Units Consumed (kWh)":              safe_row.get("Total Units Consumed (KWh)", ""),
@@ -348,12 +450,13 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
 
     # 3. Format the HTML Table
     right_aligned_columns = {
-        "Ambient Temperature (°C)", "Grid Units Consumed (kWh)", "Solar Units Consumed (kWh)",
+        "Ambient Temperature (°C)", "Yesterday Generation (kWh)", "Grid Units Consumed (kWh)", "Solar Units Consumed (kWh)",
         "Total Units Consumed (kWh)", "Total Cost (INR)", "Solar Cost Savings (INR)",
         "Panels Cleaned", "Diesel Consumed (Litres)",
         "Water Treated through STP (kilo Litres)", "Water Treated through WTP (kilo Litres)"
     }
     decimals_by_column = {
+        "Yesterday Generation (kWh)": 2,
         "Grid Units Consumed (kWh)": 0, "Solar Units Consumed (kWh)": 0, "Total Units Consumed (kWh)": 0,
         "Total Cost (INR)": 2, "Solar Cost Savings (INR)": 2, "Panels Cleaned": 0,
         "Diesel Consumed (Litres)": 0, "Water Treated through STP (kilo Litres)": 0,
@@ -401,7 +504,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
         table_parts.append('</tr>')
 
     table_parts.append(
-        f'<tr><td colspan="14" style="padding:8px 10px; font-size:11px; color:#94a3b8; text-align:center; '
+        f'<tr><td colspan="{len(display_df.columns)}" style="padding:8px 10px; font-size:11px; color:#94a3b8; text-align:center; '
         f'border-top:1px solid #e2e8f0; background-color:#f8fafc;">'
         f'Showing {len(display_df)} records &nbsp;|&nbsp; Generated by Energy Optimization Agent &nbsp;|&nbsp; '
         f'Noida Campus &nbsp;|&nbsp; Do not reply</td></tr>'

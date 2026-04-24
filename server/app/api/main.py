@@ -116,7 +116,16 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         logger.info(f"Status code: {response.status_code}")
         return response
+    
+    @app.get("/")
+    async def root_health_check():
+        return {"status": "running", "message": "Energy Dashboard API"}
 
+    # Health check endpoint (Already exists in your code)
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint"""
+        return {"status": "healthy", "service": settings.app_name}
     # Health check endpoint
     @app.get("/health")
     async def health_check():

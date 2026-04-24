@@ -159,8 +159,18 @@ def stop_scheduler(disable_auto_start: bool = True) -> Dict[str, Any]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Data Integrity (Ojas-Proof Excel Checks)
 # ──────────────────────────────────────────────────────────────────────────────
+def _status_is_done(value: any) -> bool:
+    """Fuzzy match Status column value against 'Done' (case-insensitive)."""
+    if value is None:
+        return False
+    if pd.isna(value):
+        return False
+    text = str(value).strip().lower()
+    return text == "done"
+
+
 def check_grid_diesel_entry_exists() -> bool:
-    """Check if data exists for TODAY in the grid_and_diesel Excel file."""
+    """Check if data exists for TODAY in the grid_and_diesel Excel file AND Status='Done'."""
     from app.core.logger import logger
     try:
         from .sharepoint_data_service import get_service as get_excel_service
@@ -238,8 +248,26 @@ def check_grid_diesel_entry_exists() -> bool:
             return False
 
         if today_rows[grid_units_col].apply(_has_value).any():
-            logger.info(f"[SCHEDULER DEBUG] SUCCESS! Found operator data for: {today}")
-            return True
+            # NEW: Also check the Status column for "Done" (case-insensitive)
+            status_col = next(
+                (
+                    c for c in df.columns
+                    if "status" in str(c).lower()
+                ),
+                None,
+            )
+            
+            if status_col:
+                status_values = today_rows[status_col]
+                if status_values.apply(_status_is_done).any():
+                    logger.info(f"[SCHEDULER DEBUG] SUCCESS! Found operator data with Status='Done' for: {today}")
+                    return True
+                else:
+                    logger.info(f"[SCHEDULER] Today's row exists with Grid Units, but Status is not 'Done'; treating as incomplete.")
+                    return False
+            else:
+                logger.warning(f"[SCHEDULER] Status column not found; skipping Status check. Found Grid Units for {today}.")
+                return True
 
         logger.info("[SCHEDULER] Today's row exists but Grid Units is blank; treating as missing data.")
         return False

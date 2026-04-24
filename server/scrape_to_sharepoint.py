@@ -61,6 +61,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def _load_env() -> None:
+    logger.info("[DEBUG] _load_env: Searching for .env file in parent directories...")
     # Build search list: standard parents + sibling "energy-dashboard" folders.
     # Structure: app/agents/ingestion/scrape_to_sharepoint.py
     #            app/energy-dashboard/.env  ← sibling of agents/, not a parent
@@ -77,6 +78,8 @@ def _load_env() -> None:
             load_dotenv(dotenv_path=env_file, override=False)
             logger.info(f"Loaded .env from: {env_file}")
             return
+            
+    logger.info("[DEBUG] _load_env: No .env file found. Falling back to system environment variables.")
     load_dotenv(override=False)
 
 
@@ -119,7 +122,9 @@ _drive_id:     Optional[str] = None
 def _get_token() -> str:
     global _access_token
     if _access_token:
+        logger.info("[DEBUG] _get_token: Reusing cached OAuth2 token.")
         return _access_token
+    logger.info("[DEBUG] _get_token: Requesting new OAuth2 token from Microsoft Graph...")
     resp = requests.post(
         f"https://login.microsoftonline.com/{SHAREPOINT_TENANT_ID}/oauth2/v2.0/token",
         data={
@@ -132,27 +137,35 @@ def _get_token() -> str:
     )
     resp.raise_for_status()
     _access_token = resp.json()["access_token"]
+    logger.info("[DEBUG] _get_token: Token successfully retrieved.")
     return _access_token
 
 
 def _get_site_and_drive_ids() -> tuple[str, str]:
     global _site_id, _drive_id
     if _site_id and _drive_id:
+        logger.info("[DEBUG] _get_site_and_drive_ids: Reusing cached Site and Drive IDs.")
         return _site_id, _drive_id
+        
+    logger.info(f"[DEBUG] _get_site_and_drive_ids: Resolving Site ID for '{HOSTNAME}:{SITE_PATH}'...")
     headers = {"Authorization": f"Bearer {_get_token()}"}
     _site_id = requests.get(
         f"{GRAPH_BASE}/sites/{HOSTNAME}:{SITE_PATH}", headers=headers, timeout=30
     ).json()["id"]
+    
+    logger.info(f"[DEBUG] _get_site_and_drive_ids: Resolving Drive ID for '{DRIVE_NAME}'...")
     for drive in requests.get(
         f"{GRAPH_BASE}/sites/{_site_id}/drives", headers=headers, timeout=30
     ).json().get("value", []):
         if drive["name"] == DRIVE_NAME:
             _drive_id = drive["id"]
+            logger.info("[DEBUG] _get_site_and_drive_ids: Site and Drive IDs successfully resolved.")
             return _site_id, _drive_id
     raise Exception(f"Drive '{DRIVE_NAME}' not found on site '{SITE_PATH}'")
 
 
 def _download_excel() -> bytes:
+    logger.info("[DEBUG] _download_excel: Initiating file download from SharePoint...")
     site_id, drive_id = _get_site_and_drive_ids()
     safe = requests.utils.quote(FILE_PATH_IN_DRIVE, safe="/")
     resp = requests.get(
@@ -161,10 +174,12 @@ def _download_excel() -> bytes:
         timeout=60,
     )
     resp.raise_for_status()
+    logger.info(f"[DEBUG] _download_excel: Download completed. Bytes received: {len(resp.content)}")
     return resp.content
 
 
 def _upload_excel(file_bytes: bytes) -> None:
+    logger.info(f"[DEBUG] _upload_excel: Initiating file upload to SharePoint. Payload size: {len(file_bytes)} bytes...")
     site_id, drive_id = _get_site_and_drive_ids()
     safe = requests.utils.quote(FILE_PATH_IN_DRIVE, safe="/")
     resp = requests.put(
@@ -177,11 +192,14 @@ def _upload_excel(file_bytes: bytes) -> None:
         timeout=60,
     )
     resp.raise_for_status()
+    logger.info("[DEBUG] _upload_excel: Upload completed successfully.")
 
 
-def _upload_excel_with_retry(file_bytes: bytes, retries: int = 3, delay: int = 10) -> None:
+def _upload_excel_with_retry(file_bytes: bytes, retries: int = 5, delay: int = 60) -> None:
+    logger.info(f"[DEBUG] _upload_excel_with_retry: Starting upload sequence (max retries: {retries}).")
     for attempt in range(1, retries + 1):
         try:
+            logger.info(f"[DEBUG] _upload_excel_with_retry: Upload attempt {attempt}/{retries}...")
             _upload_excel(file_bytes)
             return
         except requests.exceptions.HTTPError as e:
@@ -189,6 +207,7 @@ def _upload_excel_with_retry(file_bytes: bytes, retries: int = 3, delay: int = 1
                 logger.warning(f"⚠️ File locked (attempt {attempt}/{retries}). Retrying in {delay}s...")
                 time.sleep(delay)
             else:
+                logger.error(f"[DEBUG] _upload_excel_with_retry: HTTP Error encountered: {e}")
                 raise
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,24 +223,51 @@ def _on_response(response) -> None:
                 data = response.json()
                 captured_data.append({"url": response.url, "data": data})
                 logger.info(f"📡 API URL: {response.url}")
-            except Exception:
+                
+                # --- Added debugging logic without removing the original lines ---
+                if "change_plant" in response.url or "gen_info" in response.url:
+                    logger.info(f"   [DEBUG] TARGET API CAPTURED: {response.url}")
+                else:
+                    logger.info(f"   [DEBUG] NON-TARGET API CAPTURED (Saved to memory): {response.url}")
+                # -------------------------------------------------------------
+                
+            except Exception as parse_exc:
+                logger.warning(f"   [DEBUG] FAILED to parse JSON for {response.url}: {parse_exc}")
                 pass
-    except Exception:
+    except Exception as exc:
+        logger.error(f"[DEBUG] _on_response encountered an error: {exc}")
         pass
 
+# --- Added API Summary Helper (Called at the end of run_scraper) ---
+def _log_api_capture_summary(api_data: List[Dict]) -> None:
+    captured_urls = [str(item.get("url", "")) for item in api_data]
+    logger.info("=== API Capture Summary ===")
+    for keyword in ("change_plant", "gen_info"):
+        matches = [url for url in captured_urls if keyword in url]
+        if matches:
+            logger.info(f" ✓ CAPTURED [{keyword}] (Count: {len(matches)})")
+            for url in matches:
+                logger.info(f"    -> {url}")
+        else:
+            logger.warning(f" ❌ NOT CAPTURED [{keyword}]")
+    logger.info("===========================")
+# -------------------------------------------------------------------
 
 def run_scraper() -> List[Dict]:
     global captured_data
     captured_data = []
 
     try:
+        logger.info("[DEBUG] run_scraper: Starting Playwright execution...")
         with sync_playwright() as p:
             # ✅ Plain launch + plain new_context — exactly like working scrape.py
+            logger.info(f"[DEBUG] run_scraper: Launching browser (headless={HEADLESS})...")
             browser = p.chromium.launch(headless=HEADLESS)
             context = browser.new_context()
             page    = context.new_page()
 
             # Attach BEFORE navigation
+            logger.info("[DEBUG] run_scraper: Attaching API response listener...")
             page.on("response", _on_response)
 
             logger.info("Opening site...")
@@ -229,6 +275,7 @@ def run_scraper() -> List[Dict]:
 
             logger.info("Attempting automatic login...")
             page.wait_for_selector("#loginId", timeout=10000)
+            logger.info("[DEBUG] run_scraper: Filling login credentials...")
             page.fill("#loginId", SURYALOG_LOGIN_ID)
             page.wait_for_timeout(500)
             page.fill("#password", SURYALOG_PASSWORD)
@@ -238,14 +285,20 @@ def run_scraper() -> List[Dict]:
             logger.info("Login button clicked, waiting for page to load...")
 
             # ✅ Exact same wait sequence as scrape.py
+            logger.info("[DEBUG] run_scraper: Initial wait (8s)...")
             page.wait_for_timeout(8000)
+            
             logger.info("Waiting for APIs...")
+            logger.info("[DEBUG] run_scraper: Secondary wait (10s)...")
             page.wait_for_timeout(10000)
+            
             logger.info("Triggering interaction...")
             page.mouse.click(100, 100)
             page.wait_for_timeout(5000)
+            
             logger.info("Reloading...")
             page.reload()
+            logger.info("[DEBUG] run_scraper: Final wait after reload (10s)...")
             page.wait_for_timeout(10000)
 
             if not captured_data:
@@ -256,6 +309,7 @@ def run_scraper() -> List[Dict]:
                     "  Set SURYALOG_HEADLESS=false in .env and re-run to debug."
                 )
 
+            logger.info("[DEBUG] run_scraper: Closing browser...")
             browser.close()
 
     except Exception as exc:
@@ -264,6 +318,10 @@ def run_scraper() -> List[Dict]:
     logger.info(f"Total captured API responses: {len(captured_data)}")
     for item in captured_data:
         logger.info(f"  → {item['url']}")
+
+    # --- Added Summary Call Here ---
+    _log_api_capture_summary(captured_data)
+    # -------------------------------
 
     return captured_data
 
@@ -278,6 +336,7 @@ def _safe_float(val, default: float = 0.0) -> float:
         return default
 
 
+<<<<<<< HEAD
 def _extract_direct_day_generation_kwh(live_data: Dict, last_log: Dict) -> float:
     """Read plant-level day generation directly from API payload when available."""
     candidate_keys = [
@@ -318,6 +377,62 @@ def _extract_direct_day_generation_kwh(live_data: Dict, last_log: Dict) -> float
                     return value
 
     return 0.0
+=======
+def _find_numeric_by_keys(payload: Any, key_candidates: set[str]) -> Optional[float]:
+    """Depth-first search for the first numeric value whose key matches candidates."""
+    if isinstance(payload, dict):
+        for k, v in payload.items():
+            if str(k).strip().lower() in key_candidates:
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    pass
+            found = _find_numeric_by_keys(v, key_candidates)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for item in payload:
+            found = _find_numeric_by_keys(item, key_candidates)
+            if found is not None:
+                return found
+    return None
+
+
+def _extract_yesterday_generation_kwh(last_log: Dict[str, Any]) -> float:
+    """Extract yesterday generation (kWh) from known API patterns, with safe fallbacks."""
+    key_candidates = {
+        "whyday",
+        "whyd",
+        "whyesterday",
+        "whyesterdayday",
+        "whyesterdaygen",
+        "yesterdaygen",
+        "yesterdaygeneration",
+        "previousdaygeneration",
+        "prevdaygeneration",
+        "ydaygeneration",
+    }
+
+    # Preferred: explicit plant-level/summary field anywhere in last_log.
+    direct = _find_numeric_by_keys(last_log, key_candidates)
+    if direct is not None:
+        return max(0.0, direct)
+
+    # Fallback: sum inverter-level yesterday fields if present.
+    total = 0.0
+    found_any = False
+    inverters = last_log.get("inverter")
+    if isinstance(inverters, dict):
+        for inv in list(inverters.values())[:5]:
+            if not isinstance(inv, dict):
+                continue
+            inv_val = _find_numeric_by_keys(inv, key_candidates)
+            if inv_val is not None:
+                total += max(0.0, inv_val)
+                found_any = True
+
+    return round(total, 2) if found_any else 0.0
+>>>>>>> 40f20ea (update)
 
 
 def _get_device_status(status_code) -> str:
@@ -369,22 +484,27 @@ def _select_primary_meter(meters: Dict) -> Optional[Dict]:
       2. Any online meter
       3. Any meter (last resort)
     """
+    logger.info(f"[DEBUG] _select_primary_meter: Evaluating {len(meters)} meters...")
     # Pass 1: online + VLL > 0
-    for meter_data in meters.values():
+    for key, meter_data in meters.items():
         if isinstance(meter_data, dict):
             if meter_data.get("meter_online", 0) == 1 and _safe_float(meter_data.get("VLL")) > 0:
+                logger.info(f"[DEBUG] _select_primary_meter: Selected '{key}' (Online with VLL > 0)")
                 return meter_data
 
     # Pass 2: any online meter
-    for meter_data in meters.values():
+    for key, meter_data in meters.items():
         if isinstance(meter_data, dict) and meter_data.get("meter_online", 0) == 1:
+            logger.info(f"[DEBUG] _select_primary_meter: Selected '{key}' (Online fallback)")
             return meter_data
 
     # Pass 3: any meter at all
-    for meter_data in meters.values():
+    for key, meter_data in meters.items():
         if isinstance(meter_data, dict):
+            logger.info(f"[DEBUG] _select_primary_meter: Selected '{key}' (Absolute fallback)")
             return meter_data
 
+    logger.warning("[DEBUG] _select_primary_meter: No valid meter found in data!")
     return None
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -406,6 +526,7 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
       WHExp   → kWh cumulative
       WTOT    → Watts  (SMB)
     """
+    logger.info("[DEBUG] _extract_row: Commencing extraction logic...")
     if not api_data:
         raise ValueError("No API data captured. Aborting.")
 
@@ -414,6 +535,7 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
     try:
         plant_data = _find_change_plant(api_data)
         live_data  = _find_gen_info(api_data)
+        logger.info("[DEBUG] _extract_row: Successfully extracted target API payloads.")
     except ValueError as exc:
         raise ValueError(f"{exc}. Got URLs: {[d['url'] for d in api_data]}")
 
@@ -430,6 +552,7 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
     }
 
     # ── 1. Plant capacities ───────────────────────────────────────────────────
+    logger.info("[DEBUG] _extract_row: Extracting plant capacities...")
     plant_info = plant_data.get("plantInfo", {})
     row["DC Capacity (kWp)"] = _safe_float(plant_info.get("dc_size"), 598.6)
     row["AC Capacity (kW)"]  = _safe_float(plant_info.get("ac_size"), 500.0)
@@ -438,6 +561,7 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
 
     # ── 2. Inverters ───────────────────────────────────────────────────────────
     if "inverter" in last_log and isinstance(last_log["inverter"], dict):
+        logger.info("[DEBUG] _extract_row: Extracting inverter data...")
         total_dc_w    = 0.0
         total_ac_w    = 0.0
         total_day_kwh = 0.0
@@ -471,8 +595,13 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
         else:
             row["Day Generation (kWh)"] = round(total_day_kwh, 2)
 
+    yesterday_gen_kwh = _extract_yesterday_generation_kwh(last_log)
+    row["Yesterday Generation (kWh)"] = round(yesterday_gen_kwh, 2)
+    logger.info(f"[DEBUG] _extract_row: Yesterday Generation (kWh)={row['Yesterday Generation (kWh)']}")
+
     # ── 3. Meter (7 meters; select best online one with VLL > 0) ─────────────
     if "meter" in last_log and isinstance(last_log["meter"], dict):
+        logger.info("[DEBUG] _extract_row: Extracting meter data...")
         primary = _select_primary_meter(last_log["meter"])
 
         if primary:
@@ -500,12 +629,14 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
 
     # ── 4. SMBs (5 SMBs confirmed) ────────────────────────────────────────────
     if "smb" in last_log and isinstance(last_log["smb"], dict):
+        logger.info("[DEBUG] _extract_row: Extracting SMB data...")
         for i, (smb_id, smb) in enumerate(list(last_log["smb"].items())[:5], start=1):
             if not isinstance(smb, dict):
                 continue
             row[f"SMB{i}_status"] = _get_device_status(smb.get("suryalog_status"))
             row[f"SMB{i}"]        = round(_safe_float(smb.get("WTOT")) / 1000.0, 3)  # W → kW
 
+    logger.info("[DEBUG] _extract_row: Row extraction complete.")
     return row
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -514,17 +645,35 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
 
 def update_excel_in_memory(file_bytes: bytes, new_row: Dict) -> bytes:
     logger.info("Loading Excel file into Pandas…")
+    logger.info(f"[DEBUG] update_excel_in_memory: Received base file size of {len(file_bytes)} bytes.")
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="Sheet1")
+    logger.info(f"[DEBUG] update_excel_in_memory: Existing DataFrame has {len(df)} rows.")
+
+    # If the workbook already has a differently named yesterday-gen column,
+    # write into that existing column name to avoid introducing a new one.
+    y_col = next(
+        (
+            c for c in df.columns
+            if "yesterday" in str(c).lower() and "gen" in str(c).lower()
+        ),
+        None,
+    )
+    if y_col and "Yesterday Generation (kWh)" in new_row and y_col != "Yesterday Generation (kWh)":
+        new_row[y_col] = new_row.pop("Yesterday Generation (kWh)")
 
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     df.drop_duplicates(subset=["Date", "Time"], keep="last", inplace=True)
     df.sort_values(["Date", "Time"], inplace=True)
+    logger.info(f"[DEBUG] update_excel_in_memory: Appended row and applied deduplication. New total is {len(df)} rows.")
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Sheet1", index=False)
     buf.seek(0)
-    return buf.read()
+    
+    out_bytes = buf.read()
+    logger.info(f"[DEBUG] update_excel_in_memory: Excel serialization complete. Output size is {len(out_bytes)} bytes.")
+    return out_bytes
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Main
@@ -537,9 +686,11 @@ def main() -> None:
     logger.info(f"Password  : {'SET ✓' if SURYALOG_PASSWORD else 'EMPTY ← login will fail!'}")
 
     # 1. Scrape
+    logger.info("[DEBUG] Main Step 1: Commencing run_scraper()...")
     raw_data = run_scraper()
 
     # 2. Extract row
+    logger.info("[DEBUG] Main Step 2: Commencing _extract_row()...")
     try:
         row = _extract_row(raw_data)
         logger.info(f"✓ Slot: {row['Date']} {row['Time']}")
@@ -555,6 +706,7 @@ def main() -> None:
         sys.exit(1)
 
     # 3. Read → Modify → Write
+    logger.info("[DEBUG] Main Step 3: Read -> Modify -> Write sequence to SharePoint...")
     try:
         logger.info("Downloading UnifiedSolarData.xlsx from SharePoint…")
         original = _download_excel()
