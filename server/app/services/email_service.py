@@ -8,6 +8,7 @@ import json
 import smtplib
 import logging
 import html as html_lib
+from email.utils import getaddresses
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -50,6 +51,24 @@ def normalizeIssueText(value: Any) -> str:
     text = str(value).strip()
     if not text: return "No issues"
     return text.lower()[:1].upper() + text.lower()[1:]
+
+
+REMINDER_TO_DISPLAY = [
+    "Parag Kulshrestha | MAQ Software <paragk@maqsoftware.com>",
+    "Shailesh | MAQ Software <shaileshl@maqsoftware.com>",
+    "Ojas Upadhyay | MAQ Software <ojasu@maqsoftware.com>",
+]
+
+REMINDER_CC_DISPLAY = [
+    "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>",
+    "Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>",
+    "Ishita Singh | MAQ Software <ishitas@maqsoftware.com>",
+]
+
+
+def _emails_from_display(items: list[str]) -> list[str]:
+    parsed = getaddresses(items)
+    return [email.strip() for _, email in parsed if email and email.strip()]
 
 
 def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
@@ -452,19 +471,26 @@ def send_operator_reminder() -> Dict[str, Any]:
         smtp_port = int(os.getenv("SMTP_PORT", 587))
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
-        
-        # 1. Fetch TO and CC strings (Prioritize JSON, fallback to .env)
-        # Using 'or' ensures that if the JSON value is an empty string "", it looks at the .env
-        operator_email_str =  os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
-        cc_email_str = os.getenv("CC_EMAIL", "")
-        
-        # 2. Convert comma-separated strings into clean lists
-        to_list = [e.strip() for e in operator_email_str.split(',') if e.strip()]
-        cc_list = [e.strip() for e in cc_email_str.split(',') if e.strip()]
-        
-        # Combine them for the final SMTP delivery command
+
+        to_list = _emails_from_display(REMINDER_TO_DISPLAY)
+        cc_list = _emails_from_display(REMINDER_CC_DISPLAY)
+
         all_recipients = to_list + cc_list
-        
+        if not all_recipients:
+            _append_scheduler_send_history(
+                {
+                    "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                    "status": "Failed",
+                    "kind": "operator_reminder",
+                    "trigger_source": "operator_reminder_cycle",
+                    "subject": "Action Required: Operator Data Missing",
+                    "recipients": "",
+                    "attachment": None,
+                    "notes": "Reminder recipients are empty",
+                }
+            )
+            return {"status": "Failed", "error": "Reminder recipients are empty"}
+
         subject = "Action Required: Operator Data Missing"
         body = (
             f"Hello,\n\n"
@@ -475,21 +501,44 @@ def send_operator_reminder() -> Dict[str, Any]:
 
         msg = MIMEMultipart("alternative")
         msg["From"] = email_from
-        
-        # 3. Apply the headers so they show up correctly in the email client
-        msg["To"] = ", ".join(to_list)
+
+        msg["To"] = ", ".join(REMINDER_TO_DISPLAY)
         if cc_list:
-            msg["Cc"] = ", ".join(cc_list)
-            
+            msg["Cc"] = ", ".join(REMINDER_CC_DISPLAY)
+
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(email_from, sender_password)
-            # 4. Send to all recipients (SMTP requires the combined list here)
             server.sendmail(email_from, all_recipients, msg.as_string())
-            
+
+        _append_scheduler_send_history(
+            {
+                "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                "status": "Success",
+                "kind": "operator_reminder",
+                "trigger_source": "operator_reminder_cycle",
+                "subject": subject,
+                "recipients": ", ".join(all_recipients),
+                "attachment": None,
+                "notes": f"Operator reminder sent to {len(all_recipients)} recipients",
+            }
+        )
+
         return {"status": "Success", "notes": f"Operator reminder sent to {len(all_recipients)} recipients"}
     except Exception as e:
+        _append_scheduler_send_history(
+            {
+                "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+                "status": "Failed",
+                "kind": "operator_reminder",
+                "trigger_source": "operator_reminder_cycle",
+                "subject": "Action Required: Operator Data Missing",
+                "recipients": ", ".join(_emails_from_display(REMINDER_TO_DISPLAY + REMINDER_CC_DISPLAY)),
+                "attachment": None,
+                "notes": str(e),
+            }
+        )
         return {"status": "Failed", "error": str(e)}

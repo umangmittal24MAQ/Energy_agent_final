@@ -1,6 +1,7 @@
 const isLocalDevHost = /^(localhost|127\.0\.0\.1)$/i.test(
   window.location.hostname,
 );
+const isLoopbackHost = (host) => /^(localhost|127\.0\.0\.1)$/i.test(host);
 const DEFAULT_LOCAL_API_ORIGIN = isLocalDevHost
   ? `${window.location.protocol}//${window.location.hostname}:8000`
   : "http://localhost:8000";
@@ -19,6 +20,23 @@ function toOrigin(value, fallbackProtocol = "https") {
 
 export const BACKEND_ORIGIN = (() => {
   const explicitBase = import.meta.env.VITE_API_BASE_URL;
+
+  // In local development, keep requests same-origin so Vite proxy can forward
+  // to the backend and browser session cookies remain stable.
+  if (isLocalDevHost) {
+    if (explicitBase) {
+      try {
+        const explicitUrl = new URL(explicitBase);
+        if (isLoopbackHost(explicitUrl.hostname)) {
+          return window.location.origin;
+        }
+      } catch {
+        // Fall through to local defaults.
+      }
+    }
+    return window.location.origin;
+  }
+
   if (explicitBase) {
     try {
       return new URL(explicitBase).origin;
@@ -26,6 +44,11 @@ export const BACKEND_ORIGIN = (() => {
       const fallback = toOrigin(explicitBase, "http");
       if (fallback) return fallback;
     }
+  }
+
+  // In local UI development, default to local backend unless an explicit base URL is set.
+  if (isLocalDevHost) {
+    return DEFAULT_LOCAL_API_ORIGIN;
   }
 
   const host = import.meta.env.VITE_API_URL;
@@ -41,9 +64,16 @@ export const BACKEND_ORIGIN = (() => {
 
 const API_BASE = (() => {
   const explicitBase = import.meta.env.VITE_API_BASE_URL;
+
+  // Local dev should use Vite proxy instead of absolute backend origin.
+  if (isLocalDevHost) return "/api";
+
   if (explicitBase) return explicitBase.replace(/\/+$/, "");
   return `${BACKEND_ORIGIN}/api`;
 })();
+
+const AUTH_RELOAD_TS_KEY = "auth-reload-last-ts";
+const AUTH_RELOAD_COOLDOWN_MS = 5 * 60 * 1000;
 
 async function authFetch(url, options = {}) {
   const response = await fetch(url, {
@@ -55,13 +85,16 @@ async function authFetch(url, options = {}) {
     },
   });
 
-  if (response.status !== 401) {
-    sessionStorage.removeItem("auth-reload-once");
-  }
-
   if (response.status === 401) {
-    if (!sessionStorage.getItem("auth-reload-once")) {
-      sessionStorage.setItem("auth-reload-once", "1");
+    const now = Date.now();
+    const lastReloadTs = Number(
+      sessionStorage.getItem(AUTH_RELOAD_TS_KEY) || "0",
+    );
+    const canReload =
+      !lastReloadTs || now - lastReloadTs > AUTH_RELOAD_COOLDOWN_MS;
+
+    if (canReload) {
+      sessionStorage.setItem(AUTH_RELOAD_TS_KEY, String(now));
       console.warn("Session expired or invalid. Redirecting to login...");
       window.location.reload();
     }
@@ -111,8 +144,8 @@ export function fetchUnifiedData({ startDate, endDate } = {}) {
   });
 }
 
-export async function sendTestEmail() {
-  return requestJson(`${API_BASE}/mail/send-daily-report`, "POST");
+export async function sendTestEmail(payload = null) {
+  return requestJson(`${API_BASE}/mail/send-daily-report`, "POST", payload);
 }
 
 export function fetchSchedulerConfig() {

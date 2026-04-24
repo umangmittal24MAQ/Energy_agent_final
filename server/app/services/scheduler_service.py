@@ -55,27 +55,72 @@ def _ensure_scheduler_started() -> None:
     if _scheduler and not _scheduler.running:
         _scheduler.start()
 
+
+def _split_emails(value: Any) -> list[str]:
+    """Split comma/semicolon-separated email strings into clean tokens."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = str(value).replace(";", ",").split(",")
+    return [str(item).strip() for item in raw_items if str(item).strip()]
+
+
+def _dedupe_emails(emails: list[str]) -> list[str]:
+    """Deduplicate emails while preserving original order and casing."""
+    unique: list[str] = []
+    seen: set[str] = set()
+    for email in emails:
+        key = email.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(email)
+    return unique
+
+
+def _normalize_scheduler_recipients(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize configured recipients while preserving scheduler-config values only."""
+    normalized = dict(config or {})
+
+    merged_to = _dedupe_emails(_split_emails(normalized.get("to", "")))
+    merged_cc = _dedupe_emails(_split_emails(normalized.get("cc", "")))
+
+    to_keys = {email.lower() for email in merged_to}
+    merged_cc = [email for email in merged_cc if email.lower() not in to_keys]
+
+    normalized["to"] = ",".join(merged_to)
+    normalized["cc"] = ",".join(merged_cc)
+    return normalized
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Frontend UI Configuration Management
 # ──────────────────────────────────────────────────────────────────────────────
 def load_scheduler_config() -> Dict[str, Any]:
     """Load scheduler configuration for the UI and Email Service."""
     if SCHEDULER_CONFIG_FILE.exists():
-        with open(SCHEDULER_CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {
-        "to": "umang.mittal@maqsoftware.com",
-        "cc": "",
-        "subject": "Review Noida Daily Energy Optimization Dashboard",
-        "auto_start": True
-    }
+        with open(SCHEDULER_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+    else:
+        config = {
+            "to": "umang.mittal@maqsoftware.com",
+            "cc": "",
+            "subject": "Review Noida Daily Energy Optimization Dashboard",
+            "auto_start": True,
+        }
+
+    config.setdefault("subject", "Review Noida Daily Energy Optimization Dashboard")
+    config.setdefault("auto_start", True)
+    return _normalize_scheduler_recipients(config)
 
 def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Save configuration updates triggered from the frontend."""
+    normalized_config = _normalize_scheduler_recipients(config)
     SCHEDULER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(SCHEDULER_CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
-    return config
+    with open(SCHEDULER_CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(normalized_config, f, indent=4)
+    return normalized_config
 
 def get_scheduler_status() -> Dict[str, Any]:
     """Returns the live status of the clock to the frontend dashboard."""

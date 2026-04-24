@@ -161,6 +161,93 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
     return default
 
 
+def _normalize_key(value: str) -> str:
+    return str(value).lower().replace(" ", "").replace("_", "").replace("\n", "")
+
+
+def _get_from_candidates(row: pd.Series, candidates: list[str], default: any = ""):
+    """Get value from row by exact normalized candidate column names."""
+    lookup: dict[str, str] = {}
+    for col in row.index:
+        key = _normalize_key(col)
+        lookup.setdefault(key, str(col))
+
+    for candidate in candidates:
+        source_col = lookup.get(_normalize_key(candidate))
+        if not source_col:
+            continue
+        val = row[source_col]
+        if pd.isna(val) or str(val).strip() == "":
+            continue
+        return val
+    return default
+
+
+def _extract_live_solar_snapshot(solar_rows: pd.DataFrame) -> dict[str, any]:
+    """Extract latest SMB/Inverter values and statuses from UnifiedSolarData rows."""
+    snapshot = {
+        "Day Generation (kWh)": "",
+    }
+    for i in range(1, 6):
+        snapshot[f"SMB{i}"] = ""
+        snapshot[f"SMB{i}_status"] = ""
+        snapshot[f"Inverter{i}"] = ""
+        snapshot[f"Inverter{i}_status"] = ""
+
+    if solar_rows is None or solar_rows.empty:
+        return snapshot
+
+    latest_rows = solar_rows.copy()
+    if "Time" in latest_rows.columns:
+        latest_rows["_parsed_time"] = pd.to_datetime(latest_rows["Time"], errors="coerce")
+        latest_rows = latest_rows.sort_values("_parsed_time")
+
+    latest = latest_rows.iloc[-1]
+    snapshot["Day Generation (kWh)"] = _get_from_candidates(
+        latest,
+        ["Day Generation (kWh)", "DayGeneration", "Day Generation"],
+        "",
+    )
+
+    for i in range(1, 6):
+        snapshot[f"SMB{i}"] = _get_from_candidates(
+            latest,
+            [f"SMB{i}", f"SMB {i}", f"SMB_{i}"],
+            "",
+        )
+        snapshot[f"SMB{i}_status"] = _get_from_candidates(
+            latest,
+            [
+                f"SMB{i}_status",
+                f"SMB{i} status",
+                f"SMB{i} Status",
+                f"SMB {i}_status",
+                f"SMB {i} status",
+                f"SMB {i} Status",
+            ],
+            "",
+        )
+        snapshot[f"Inverter{i}"] = _get_from_candidates(
+            latest,
+            [f"Inverter{i}", f"Inverter {i}", f"Inverter_{i}", f"INV_{i}"],
+            "",
+        )
+        snapshot[f"Inverter{i}_status"] = _get_from_candidates(
+            latest,
+            [
+                f"Inverter{i}_status",
+                f"Inverter{i} status",
+                f"Inverter{i} Status",
+                f"Inverter {i}_status",
+                f"Inverter {i} status",
+                f"Inverter {i} Status",
+            ],
+            "",
+        )
+
+    return snapshot
+
+
 def _get_peak_automated_solar_units(solar_rows: pd.DataFrame) -> float:
     """Return the peak cumulative automated solar units for the day."""
     if solar_rows is None or solar_rows.empty:
@@ -230,6 +317,7 @@ def process_master_data(
     
     # 5. Extract Solar Data (WITH SMART FALLBACK)
     automated_solar_units = 0.0
+    live_solar_snapshot = _extract_live_solar_snapshot(solar_rows)
     if not solar_rows.empty:
         automated_solar_units = _get_peak_automated_solar_units(solar_rows)
     else:
@@ -280,7 +368,6 @@ def process_master_data(
         "Date": operator_date,                      
         "Day":  consumption_dt.strftime("%A"),
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
-        "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
         "Solar Units Consumed(KWh)": solar_units,
@@ -296,8 +383,9 @@ def process_master_data(
         "Inverter_2": _get_fuzzy(grid_today, "inv_2", ""),
         "Inverter_3": _get_fuzzy(grid_today, "inv_3", ""),
         "Inverter_4": _get_fuzzy(grid_today, "inv_4", ""),
-        "Inverter_5": _get_fuzzy(grid_today, "inv_5", "")
+        "Inverter_5": _get_fuzzy(grid_today, "inv_5", ""),
     }
+    master_row.update(live_solar_snapshot)
     
     # 8. Push to Master Data
     logger.info("Downloading Master-data.xlsx...")

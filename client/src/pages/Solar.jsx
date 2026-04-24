@@ -5,6 +5,20 @@ import {
 } from "../components/Skeleton";
 import { useState, useMemo } from "react";
 import { useUnifiedData } from "../lib/hooks";
+import {
+  formatLongDate,
+  formatNumber,
+  getLocalDateKey,
+  normalizeRowDateKey,
+  sortRowsByDateAsc,
+  PAGE_SIZE,
+} from "../lib/utils";
+import {
+  COL,
+  CHART_COLORS,
+  CHART_AXIS,
+  INVERTER_COUNT,
+} from "../lib/constants";
 import KpiCard from "../components/KpiCard";
 import {
   Sun,
@@ -14,6 +28,8 @@ import {
   Calendar,
   Zap,
   ArrowUpDown,
+  Activity,
+  Clock,
 } from "lucide-react";
 import {
   AreaChart,
@@ -24,74 +40,115 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 
-function formatLongDate(dateStr) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d)) return dateStr;
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function formatDateTick(dateStr) {
-  return formatLongDate(dateStr);
-}
-
-function formatNumber(v) {
-  if (v == null) return "—";
-  const numeric = typeof v === "number" ? v : Number(v);
-  if (Number.isFinite(numeric)) {
-    return Math.ceil(numeric).toLocaleString("en-IN", {
-      maximumFractionDigits: 0,
-    });
-  }
-  return v;
-}
-
+// Solar-specific: returns null for missing values (used by inverter display)
 function parseNumeric(value) {
-  if (value == null || value === "") return 0;
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const text = String(value);
   const direct = Number(text);
   if (Number.isFinite(direct)) return direct;
   const match = text.match(/[-+]?\d*\.?\d+/);
-  return match ? Number(match[0]) : 0;
+  return match ? Number(match[0]) : null;
 }
 
-function getLocalDateKey(dateObj) {
-  const year = dateObj.getFullYear();
-  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-  const day = String(dateObj.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function normalizeRowDateKey(value) {
-  if (!value) return "";
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return value;
+function normalizeInverterStatus(rawStatus) {
+  const text = String(rawStatus || "")
+    .trim()
+    .toLowerCase();
+  if (!text) return "OFFLINE";
+  if (
+    text.includes("fault") ||
+    text.includes("error") ||
+    text.includes("trip")
+  ) {
+    return "FAULT";
   }
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return getLocalDateKey(d);
+  if (
+    text === "on" ||
+    text.includes(" on") ||
+    text.includes("active") ||
+    text.includes("online") ||
+    text.includes("running") ||
+    text.includes("ok")
+  ) {
+    return "ACTIVE";
+  }
+  if (
+    text === "off" ||
+    text.includes("offline") ||
+    text.includes("down") ||
+    text.includes("stop")
+  ) {
+    return "OFFLINE";
+  }
+  return "OFFLINE";
 }
 
-function sortRowsByDateAsc(rows) {
-  return [...rows].sort((a, b) => {
-    const aKey = normalizeRowDateKey(a.date) || String(a.date ?? "");
-    const bKey = normalizeRowDateKey(b.date) || String(b.date ?? "");
-    if (aKey < bKey) return -1;
-    if (aKey > bKey) return 1;
-    return 0;
-  });
+function resolveLiveStatus(statusValues) {
+  const normalized = (statusValues || [])
+    .map((value) => normalizeInverterStatus(value))
+    .filter(Boolean);
+
+  if (normalized.includes("FAULT")) return "FAULT";
+  if (normalized.includes("ACTIVE")) return "ACTIVE";
+  return "OFFLINE";
 }
 
-const PAGE_SIZE = 15;
+function formatGenerationValue(value) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value.toFixed(3)} kWh`;
+}
 
-export default function Solar() {
+function findFirstValue(row, keys) {
+  for (const key of keys) {
+    if (row && row[key] != null && String(row[key]).trim() !== "") {
+      return row[key];
+    }
+  }
+  return null;
+}
+
+function hasMeaningfulLiveValue(value) {
+  if (value == null) return false;
+  const text = String(value).trim();
+  if (!text) return false;
+  if (text.toLowerCase() === "nan") return false;
+  return true;
+}
+
+function rowHasLiveInverterData(row) {
+  if (!row) return false;
+  for (let i = 1; i <= INVERTER_COUNT; i += 1) {
+    const candidates = [
+      `SMB${i}`,
+      `SMB ${i}`,
+      `SMB_${i}`,
+      `Inverter${i}`,
+      `Inverter ${i}`,
+      `Inverter_${i}`,
+      `SMB${i}_status`,
+      `SMB${i} status`,
+      `SMB${i} Status`,
+      `Inverter${i}_status`,
+      `Inverter${i} status`,
+      `Inverter${i} Status`,
+    ];
+    if (candidates.some((key) => hasMeaningfulLiveValue(row[key]))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export default function Solar({
+  embedded = false,
+  startDate: propStartDate,
+  endDate: propEndDate,
+}) {
   const {
     data: unified,
     isLoading: dataLoading,
@@ -103,7 +160,10 @@ export default function Solar() {
   const [sortAsc, setSortAsc] = useState(false);
 
   const dateRange = unified?.date_range || null;
-  const sourceRows = unified?.data || [];
+  const sourceRows = useMemo(() => unified?.data || [], [unified?.data]);
+
+  // Date range: use props when embedded, otherwise full range
+  const hasDateFilter = embedded && propStartDate && propEndDate;
 
   const metricValues = useMemo(() => {
     if (sourceRows.length === 0) {
@@ -114,42 +174,51 @@ export default function Solar() {
       };
     }
 
-    const todayKey = getLocalDateKey(new Date());
-    const rowsWithKey = sourceRows.map((row) => ({
-      row,
-      dateKey: normalizeRowDateKey(row["Date"]),
-    }));
+    let selectedRows;
+    if (hasDateFilter) {
+      selectedRows = sourceRows.filter((row) => {
+        const key = normalizeRowDateKey(row[COL.DATE]);
+        if (!key) return false;
+        return key >= propStartDate && key <= propEndDate;
+      });
+    } else {
+      const todayKey = getLocalDateKey(new Date());
+      const rowsWithKey = sourceRows.map((row) => ({
+        row,
+        dateKey: normalizeRowDateKey(row[COL.DATE]),
+      }));
 
-    const todayRows = rowsWithKey
-      .filter((item) => item.dateKey === todayKey)
-      .map((item) => item.row);
+      const todayRows = rowsWithKey
+        .filter((item) => item.dateKey === todayKey)
+        .map((item) => item.row);
 
-    const latestDateKey = rowsWithKey
-      .map((item) => item.dateKey)
-      .filter(Boolean)
-      .sort()
-      .at(-1);
+      const latestDateKey = rowsWithKey
+        .map((item) => item.dateKey)
+        .filter(Boolean)
+        .sort()
+        .at(-1);
 
-    const fallbackRows = rowsWithKey
-      .filter((item) => item.dateKey === latestDateKey)
-      .map((item) => item.row);
+      const fallbackRows = rowsWithKey
+        .filter((item) => item.dateKey === latestDateKey)
+        .map((item) => item.row);
 
-    const selectedRows = todayRows.length > 0 ? todayRows : fallbackRows;
+      selectedRows = todayRows.length > 0 ? todayRows : fallbackRows;
+    }
 
     const solarUnitsRaw = selectedRows.reduce(
-      (sum, row) => sum + parseNumeric(row["Solar Units Consumed(KWh)"]),
+      (sum, row) => sum + (parseNumeric(row[COL.SOLAR_UNITS]) || 0),
       0,
     );
     const gridUnitsRaw = selectedRows.reduce(
-      (sum, row) => sum + parseNumeric(row["Grid Units Consumed (KWh)"]),
+      (sum, row) => sum + (parseNumeric(row[COL.GRID_UNITS]) || 0),
       0,
     );
     const dieselUnitsRaw = selectedRows.reduce(
-      (sum, row) => sum + parseNumeric(row["Diesel consumed"]),
+      (sum, row) => sum + (parseNumeric(row[COL.DIESEL]) || 0),
       0,
     );
     const solarCostSavingRaw = selectedRows.reduce(
-      (sum, row) => sum + parseNumeric(row["Energy Saving in INR"]),
+      (sum, row) => sum + (parseNumeric(row[COL.ENERGY_SAVINGS]) || 0),
       0,
     );
 
@@ -162,23 +231,129 @@ export default function Solar() {
       solarCostSaving: Math.ceil(solarCostSavingRaw),
       solarShare: solarShareValue,
     };
-  }, [sourceRows]);
+  }, [sourceRows, hasDateFilter, propStartDate, propEndDate]);
 
-  const chartData = useMemo(
+  const allChartData = useMemo(
     () =>
       (unified?.data || []).map((row) => ({
-        date: row["Date"],
-        solar: row["Solar Units Consumed(KWh)"] ?? 0,
-        total: row["Total Units Consumed (KWh)"] ?? 0,
-        savings: row["Energy Saving in INR"] ?? 0,
+        date: row[COL.DATE],
+        solar: row[COL.SOLAR_UNITS] ?? 0,
+        total: row[COL.TOTAL_UNITS] ?? 0,
+        savings: row[COL.ENERGY_SAVINGS] ?? 0,
       })),
     [unified],
   );
+
+  const chartData = useMemo(() => {
+    if (!hasDateFilter) return allChartData;
+    return allChartData.filter((row) => {
+      const key = normalizeRowDateKey(row.date);
+      if (!key) return false;
+      return key >= propStartDate && key <= propEndDate;
+    });
+  }, [allChartData, hasDateFilter, propStartDate, propEndDate]);
 
   const trendChartData = useMemo(
     () => sortRowsByDateAsc(chartData),
     [chartData],
   );
+
+  const latestSolarRow = useMemo(() => {
+    if (!sourceRows.length) return null;
+    const sorted = [...sourceRows].sort((a, b) => {
+      const aKey = `${normalizeRowDateKey(a[COL.DATE]) || ""}-${String(a[COL.TIME] || "")}`;
+      const bKey = `${normalizeRowDateKey(b[COL.DATE]) || ""}-${String(b[COL.TIME] || "")}`;
+      return aKey.localeCompare(bKey);
+    });
+
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      if (rowHasLiveInverterData(sorted[i])) {
+        return sorted[i];
+      }
+    }
+
+    return sorted[sorted.length - 1] || null;
+  }, [sourceRows]);
+
+  const inverterInsights = useMemo(() => {
+    const fallbackRows = Array.from({ length: INVERTER_COUNT }, (_, idx) => ({
+      id: `INV_${idx + 1}`,
+      status: "OFFLINE",
+      unitsGenerated: null,
+      lastUpdated: "—",
+    }));
+
+    if (!latestSolarRow) {
+      return {
+        cards: fallbackRows,
+        rows: fallbackRows,
+        hasPerInverterGeneration: false,
+        aggregateGeneration: null,
+      };
+    }
+
+    const lastUpdatedDate = formatLongDate(latestSolarRow[COL.DATE]);
+    const timeText = String(latestSolarRow[COL.TIME] || "").trim();
+    const lastUpdated =
+      [lastUpdatedDate, timeText].filter(Boolean).join(" ") || "—";
+
+    const rows = Array.from({ length: INVERTER_COUNT }, (_, idx) => {
+      const i = idx + 1;
+      const smbStatusRaw = findFirstValue(latestSolarRow, [
+        `SMB${i}_status`,
+        `SMB${i} status`,
+        `SMB${i} Status`,
+        `SMB ${i}_status`,
+        `SMB ${i} status`,
+        `SMB ${i} Status`,
+      ]);
+
+      const inverterStatusRaw = findFirstValue(latestSolarRow, [
+        `Inverter${i}_status`,
+        `Inverter${i} status`,
+        `Inverter${i} Status`,
+        `INV_${i}_status`,
+      ]);
+
+      const unitsRaw = findFirstValue(latestSolarRow, [
+        `SMB${i}`,
+        `SMB ${i}`,
+        `SMB_${i}`,
+        `Inverter${i}`,
+        `Inverter ${i}`,
+        `Inverter_${i}`,
+        `Inverter${i} Units Generated (kWh)`,
+        `Inverter${i} Day Generation (kWh)`,
+        `INV_${i} Units Generated (kWh)`,
+        `INV_${i}_kwh`,
+        `INV_${i}_day_generation_kwh`,
+      ]);
+
+      const smbStatus = normalizeInverterStatus(smbStatusRaw);
+      const inverterStatus = normalizeInverterStatus(inverterStatusRaw);
+
+      return {
+        id: `INV_${i}`,
+        smbId: `SMB${i}`,
+        status: resolveLiveStatus([smbStatusRaw, inverterStatusRaw]),
+        smbStatus,
+        inverterStatus,
+        unitsGenerated: parseNumeric(unitsRaw),
+        lastUpdated,
+      };
+    });
+
+    const hasPerInverterGeneration = rows.some(
+      (row) => row.unitsGenerated != null && row.unitsGenerated >= 0,
+    );
+
+    return {
+      cards: rows,
+      rows,
+      hasPerInverterGeneration,
+      aggregateGeneration: parseNumeric(latestSolarRow[COL.DAY_GENERATION]),
+    };
+  }, [latestSolarRow]);
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -215,21 +390,21 @@ export default function Solar() {
       format: formatNumber,
     },
     {
-      key: "total",
-      label: "Total Units Consumed (KWh)",
-      format: formatNumber,
-    },
-    {
       key: "savings",
       label: "Solar Cost Saving (INR)",
       format: formatNumber,
     },
   ];
 
+  const rootClass = embedded
+    ? "space-y-6"
+    : "px-8 py-6 space-y-6 bg-gray-100 rounded-3xl";
+
+  const contentClass = embedded ? "space-y-6" : "space-y-6";
+
   return (
-    <div className="px-8 py-6 space-y-6 bg-gray-100 rounded-3xl h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between shrink-0">
+    <div className={rootClass}>
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
             <Sun className="w-5 h-5 text-amber-500" />
@@ -239,7 +414,7 @@ export default function Solar() {
             Solar generation performance, savings, and detailed daily breakdown
           </p>
         </div>
-        {dateRange && (
+        {!embedded && dateRange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
             {formatLongDate(dateRange.min_date)} —{" "}
@@ -249,52 +424,17 @@ export default function Solar() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2.5 text-sm text-red-600 border border-red-200 bg-red-50 px-5 py-3 rounded-lg shrink-0">
+        <div className="flex items-center gap-2.5 text-sm text-red-600 border border-red-200 bg-red-50 px-5 py-3 rounded-lg">
           <AlertCircle className="w-4 h-4 shrink-0" />
           Failed to load: {error.message}
         </div>
       )}
 
-      {/* Solar KPIs */}
-      <div className="grid grid-cols-3 gap-4 shrink-0">
-        {dataLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
-        ) : (
-          <>
-            <KpiCard
-              label="Solar Units Consumed"
-              value={metricValues.solarUnits}
-              unit="KWh"
-              icon={Sun}
-              accent="text-amber-600"
-              iconBg="bg-amber-50"
-            />
-            <KpiCard
-              label="Solar Cost Saving (INR)"
-              value={metricValues.solarCostSaving}
-              unit="INR"
-              icon={PiggyBank}
-              accent="text-emerald-600"
-              iconBg="bg-emerald-50"
-            />
-            <KpiCard
-              label="Solar Share"
-              value={metricValues.solarShare}
-              unit="%"
-              icon={Zap}
-              accent="text-blue-600"
-              iconBg="bg-blue-50"
-            />
-          </>
-        )}
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-6 pr-1">
-        {/* Solar Energy Trend */}
+      <div className={contentClass}>
         {dataLoading ? (
           <ChartSkeleton />
         ) : (
-          <section className="bg-white rounded-lg border border-slate-200">
+          <section className="bg-white rounded-lg border border-slate-200 animate-scale-in">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-amber-600" />
@@ -308,45 +448,63 @@ export default function Solar() {
                 </span>
               )}
             </div>
-            <div className="p-5">
-              <ResponsiveContainer width="100%" height={320}>
-                <AreaChart data={trendChartData}>
+            <div className="pr-5 pt-5">
+              <ResponsiveContainer width="100%" height={360}>
+                <AreaChart
+                  data={trendChartData}
+                  margin={{
+                    top: 8,
+                    right: 8,
+                    left: 0,
+                    bottom: 40,
+                  }}
+                >
                   <defs>
                     <linearGradient id="solarGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                      <stop
+                        offset="5%"
+                        stopColor={CHART_COLORS.solar}
+                        stopOpacity={0.2}
+                      />
+                      <stop
+                        offset="95%"
+                        stopColor={CHART_COLORS.solar}
+                        stopOpacity={0}
+                      />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke={CHART_AXIS.gridStroke}
+                  />
                   <XAxis
                     dataKey="date"
-                    tickFormatter={formatDateTick}
+                    tickFormatter={formatLongDate}
                     tick={{ fontSize: 11 }}
-                    stroke="#94a3b8"
+                    stroke={CHART_AXIS.tickStroke}
                     minTickGap={40}
                   />
-                  <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={60} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    stroke={CHART_AXIS.tickStroke}
+                    width={60}
+                  />
                   <Tooltip
-                    labelFormatter={formatDateTick}
+                    labelFormatter={formatLongDate}
                     contentStyle={{
                       borderRadius: 8,
-                      border: "1px solid #e2e8f0",
+                      border: CHART_AXIS.tooltipBorder,
                       fontSize: 12,
                       boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                     }}
                   />
-                  <Legend
-                    verticalAlign="top"
-                    wrapperStyle={{
-                      fontSize: 12,
-                      paddingTop: 8,
-                    }}
-                  />
+                  {/* ADDED: Legend positioning fix to avoid chart overlap. */}
+                  <Legend verticalAlign="bottom" height={36} />
                   <Area
                     type="monotone"
                     dataKey="solar"
                     name="Solar Units Consumed (KWh)"
-                    stroke="#f59e0b"
+                    stroke={CHART_COLORS.solar}
                     strokeWidth={2}
                     fill="url(#solarGrad)"
                   />
@@ -356,11 +514,60 @@ export default function Solar() {
           </section>
         )}
 
-        {/* Solar Data Table */}
+        {/* ADDED: Inverter status cards (live). */}
+        <section className="bg-white rounded-lg border border-slate-200 animate-slide-up">
+          <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-amber-600" />
+            <h2 className="text-sm font-medium text-slate-700">
+              Inverter Status (Live)
+            </h2>
+          </div>
+          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {inverterInsights.cards.map((item) => {
+              const badgeClass =
+                item.status === "ACTIVE"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : item.status === "FAULT"
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-slate-50 text-slate-600 border-slate-200";
+
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 p-3 bg-slate-50/60"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-500">
+                      {item.id}
+                    </p>
+                    <p className="text-[10px] font-medium text-slate-400">
+                      {item.smbId}
+                    </p>
+                  </div>
+                  <span
+                    className={`mt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeClass}`}
+                  >
+                    {item.status}
+                  </span>
+
+                  <p className="mt-2 text-sm font-semibold text-slate-800">
+                    {formatGenerationValue(item.unitsGenerated)}
+                  </p>
+
+                  <div className="mt-2 space-y-1 text-[10px] text-slate-500">
+                    <p>SMB Status: {item.smbStatus}</p>
+                    <p>Inverter Status: {item.inverterStatus}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         {dataLoading ? (
           <TableSkeleton rows={4} cols={4} />
         ) : (
-          <section className="bg-white rounded-lg border border-slate-200">
+          <section className="bg-white rounded-lg border border-slate-200 animate-slide-up">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Sun className="w-4 h-4 text-amber-600" />
@@ -372,15 +579,15 @@ export default function Solar() {
                 {sorted.length} records
               </span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
+            <div className="max-h-[70vh] overflow-auto">
+              <table className="energy-table w-full text-sm text-left">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     {TABLE_COLS.map((col) => (
                       <th
                         key={col.key}
                         onClick={() => toggleSort(col.key)}
-                        className="px-5 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide cursor-pointer select-none hover:text-slate-700"
+                        className="px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wide cursor-pointer select-none hover:text-slate-700 whitespace-nowrap sticky top-0 z-10 bg-slate-50"
                       >
                         <span className="inline-flex items-center gap-1">
                           {col.label}
@@ -399,7 +606,7 @@ export default function Solar() {
                       className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors"
                     >
                       {TABLE_COLS.map((col) => (
-                        <td key={col.key} className="px-5 py-3 text-slate-700">
+                        <td key={col.key} className="px-4 py-3 text-slate-700">
                           {col.format(row[col.key])}
                         </td>
                       ))}
@@ -409,7 +616,6 @@ export default function Solar() {
               </table>
             </div>
 
-            {/* Pagination */}
             {pageCount > 1 && (
               <div className="px-5 py-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
                 <span>

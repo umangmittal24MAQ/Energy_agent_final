@@ -278,6 +278,48 @@ def _safe_float(val, default: float = 0.0) -> float:
         return default
 
 
+def _extract_direct_day_generation_kwh(live_data: Dict, last_log: Dict) -> float:
+    """Read plant-level day generation directly from API payload when available."""
+    candidate_keys = [
+        "day_generation",
+        "dayGeneration",
+        "day_gen",
+        "daily_generation",
+        "today_generation",
+        "todayGeneration",
+        "today_gen",
+        "plant_day_generation",
+        "day_generation_kwh",
+        "dayGenerationKwh",
+    ]
+
+    containers: List[Dict] = []
+    if isinstance(last_log, dict):
+        containers.append(last_log)
+        for key, value in last_log.items():
+            if key in {"inverter", "meter", "smb"}:
+                continue
+            if isinstance(value, dict):
+                containers.append(value)
+
+    if isinstance(live_data, dict):
+        containers.append(live_data)
+        for key, value in live_data.items():
+            if key == "lastLogData":
+                continue
+            if isinstance(value, dict):
+                containers.append(value)
+
+    for container in containers:
+        for candidate in candidate_keys:
+            if candidate in container:
+                value = _safe_float(container.get(candidate), 0.0)
+                if value > 0:
+                    return value
+
+    return 0.0
+
+
 def _get_device_status(status_code) -> str:
     """
     Confirmed from real data: suryalog_status is a large int bitmask.
@@ -394,24 +436,27 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
 
     last_log = live_data.get("lastLogData", {})
 
-    # ── 2. Inverters (5 inverters confirmed) ──────────────────────────────────
+    # ── 2. Inverters ───────────────────────────────────────────────────────────
     if "inverter" in last_log and isinstance(last_log["inverter"], dict):
         total_dc_w    = 0.0
         total_ac_w    = 0.0
         total_day_kwh = 0.0
 
-        for i, (inv_id, inv) in enumerate(list(last_log["inverter"].items())[:5], start=1):
+        all_inverters = [item for item in last_log["inverter"].items() if isinstance(item[1], dict)]
+        sorted_inverters = sorted(all_inverters, key=lambda item: str(item[0]))
+
+        # Aggregate totals from all inverters available in payload.
+        for inv_id, inv in sorted_inverters:
+            total_dc_w    += _safe_float(inv.get("DC_W"))
+            total_ac_w    += _safe_float(inv.get("WT"))
+            total_day_kwh += _safe_float(inv.get("WHDay"))
+
+        # Keep individual display columns to first 5 inverters for schema compatibility.
+        for i, (inv_id, inv) in enumerate(sorted_inverters[:5], start=1):
             if not isinstance(inv, dict):
                 continue
 
-            dc_w    = _safe_float(inv.get("DC_W"))
             ac_w    = _safe_float(inv.get("WT"))
-            # WHDay confirmed to be kWh already (values: 111.5, 366.9, 418.2, 329.6, 131.2)
-            wh_day  = _safe_float(inv.get("WHDay"))
-
-            total_dc_w    += dc_w
-            total_ac_w    += ac_w
-            total_day_kwh += wh_day
 
             row[f"Inverter{i}_status"] = _get_device_status(inv.get("suryalog_status"))
             row[f"Inverter{i}"]        = round(ac_w / 1000.0, 3)   # W → kW
@@ -419,7 +464,12 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
         row["DC Power (kW)"]        = round(total_dc_w / 1000.0, 2)
         row["AC Power (kW)"]        = round(total_ac_w / 1000.0, 2)
         row["Active Power (kW)"]    = row["AC Power (kW)"]
-        row["Day Generation (kWh)"] = round(total_day_kwh, 2)   # already kWh
+
+        direct_day_gen_kwh = _extract_direct_day_generation_kwh(live_data, last_log)
+        if direct_day_gen_kwh > 0:
+            row["Day Generation (kWh)"] = round(direct_day_gen_kwh, 2)
+        else:
+            row["Day Generation (kWh)"] = round(total_day_kwh, 2)
 
     # ── 3. Meter (7 meters; select best online one with VLL > 0) ─────────────
     if "meter" in last_log and isinstance(last_log["meter"], dict):
