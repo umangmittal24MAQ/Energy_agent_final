@@ -12,7 +12,18 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import pandas as pd
+
 _daily_report_tracker: Dict[str, bool] = {}
+
+# 🚀 FIX 1: Added missing tracker check for the Data Refresh Service
+def tracker_is_locked_for_today() -> bool:
+    """
+    Allows external services (like data_refresh_service) to check 
+    if the daily report has already been dispatched for today.
+    """
+    IST = ZoneInfo("Asia/Kolkata")
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    return _daily_report_tracker.get(today_str, False)
 
 
 # Optional dependency - scheduler is not critical for data endpoints
@@ -418,24 +429,22 @@ def _run_solar_scraper() -> None:
         backend_root = Path(__file__).parent.parent.parent
         script_path = backend_root / "scrape_to_sharepoint.py"
         
-        # Run it as a separate process
-        result = subprocess.run(
+        # 🚀 FIX 2: Removed capture_output so logs stream in real-time
+        subprocess.run(
             [sys.executable, str(script_path)],
-            capture_output=True,
-            text=True,
             check=True
         )
         
-        logger.info(f"Scraper completed successfully. Output: {result.stdout[:200]}...")
+        logger.info("✅ Scraper subprocess finished successfully.")
 
     except subprocess.CalledProcessError as exc:
         from app.core.logger import logger
-        logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode})")
-        logger.error(f"--- SCRAPER STDERR ---\n{exc.stderr}")
-        logger.error(f"--- SCRAPER STDOUT ---\n{exc.stdout}")
+        # Removed exc.stderr reference because it's no longer captured, it just prints to the main log
+        logger.error(f"❌ Scraper subprocess failed (Exit Code {exc.returncode}). Check main terminal logs for details.")
     except Exception as exc:
         from app.core.logger import logger
         logger.error(f"Scraper completely failed to trigger: {exc}")
+
 
 def _run_data_refresh() -> None:
     """Tells caching service to pull fresh stats for the UI Dashboard."""
@@ -445,9 +454,6 @@ def _run_data_refresh() -> None:
     except Exception as e:
         logger.error(f"Error in data refresh task: {e}")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Time-Based Jobs
-# ──────────────────────────────────────────────────────────────────────────────
 # ──────────────────────────────────────────────────────────────────────────────
 # Time-Based Jobs
 # ──────────────────────────────────────────────────────────────────────────────
@@ -625,7 +631,6 @@ def initialize_scheduler_from_config() -> None:
         
     _run_data_refresh()
     
-    # 1. Start Scraper Clock (Runs every 30 mins)
     # 1. Start Scraper Clock (Runs every 30 mins between 06:00 and 19:30)
     _scheduler.add_job(
         _run_solar_scraper,
