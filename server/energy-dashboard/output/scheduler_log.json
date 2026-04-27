@@ -1,0 +1,464 @@
+[
+  {
+    "timestamp": "2026-04-13T14:53:08.555449+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test 20260413-145252]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:52:53.924485+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test 20260413-145228]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:51:44.082992+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "[Recipient Adherence Test]",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-13T14:48:22.362689+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "history_log_test",
+    "subject": "[History Log Test] 2026-04-13 14:48:09",
+    "recipients": "ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260413.xlsx",
+    "notes": "Data for today is not updated. Showing daily energy report till 2026-04-12."
+  },
+  {
+    "timestamp": "2026-04-10T10:35:46.586847",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; cutoff_hit=True; report_status=Success; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-10T10:34:47.903505",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; error=SharePoint not authenticated; cutoff_hit=True; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-10T10:33:58.682383",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 0 rows from sharepoint-master-data for 2026-04-09; error=SharePoint not authenticated; cutoff_hit=True; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-09",
+    "found": false,
+    "action": "cutoff_reached_empty_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:03.612768",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:38:03.570214",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:54.220210",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T14:35:54.163625",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T14:35:54.163625",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T13:03:09.879644",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T13:03:09.831447",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T13:03:09.831447",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T13:01:05.635288",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Failed; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T13:01:05.600451",
+    "status": "Failed",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Error: Could not build daily report email body: No master data rows returned from Excel.; automation_failure_notification=Success",
+    "failure_notification": {
+      "timestamp": "2026-04-09T13:01:05.600451",
+      "status": "Success",
+      "recipients": "prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com",
+      "attachment": null,
+      "notes": "Automation-failure stakeholder notification sent; root_cause=Could not build daily report email body: No master data rows returned from Excel."
+    }
+  },
+  {
+    "timestamp": "2026-04-09T12:29:26.845206",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T12:29:26.803936",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:46.618507",
+    "status": "Check",
+    "recipients": "",
+    "attachment": null,
+    "notes": "checked 1 rows from sharepoint-master-data for 2026-04-08; report_status=Success; attempt=1",
+    "date_checked": "2026-04-08",
+    "found": true,
+    "action": "found_true_daily_report_sent",
+    "trigger_source": "os_scheduler_8am"
+  },
+  {
+    "timestamp": "2026-04-09T12:23:46.576636",
+    "status": "Success",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_09042026.csv",
+    "notes": "Email sent successfully to umang.mittal@maqsoftware.com with HTML report and attachment"
+  },
+  {
+    "timestamp": "2026-04-20T15:06:53.293600+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 18, 2026 & April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T15:25:31.688822+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T15:49:09.716260+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 18, 2026",
+    "recipients": "ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260418.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T15:55:30.587901+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T15:56:54.254168+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T16:10:08.351255+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-20T16:11:48.570985+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 20, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260420.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:35:06.159127+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:35:29.046118+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T14:47:35.087100+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-21T15:24:21.377050+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 21, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260421.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-22T10:01:01.162754+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 22, 2026",
+    "recipients": "ishitas@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260422.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T10:31:00.375256+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "scheduler",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "ojasu@maqsoftware.com, vimalv@maqsoftware.com, ramc@maqsoftware.com, amrishs@maqsoftware.com, naveenk@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T12:13:31.844372+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Invalid value '925.1' for dtype 'str'. Value should be a string or missing value, got 'float' instead."
+  },
+  {
+    "timestamp": "2026-04-27T12:14:59.629615+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Invalid value '925.1' for dtype 'str'. Value should be a string or missing value, got 'float' instead."
+  },
+  {
+    "timestamp": "2026-04-27T12:15:08.215788+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Invalid value '925.1' for dtype 'str'. Value should be a string or missing value, got 'float' instead."
+  },
+  {
+    "timestamp": "2026-04-27T12:20:56.749586+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T12:22:52.343015+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T12:29:32.947003+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Invalid value '925.1' for dtype 'str'. Value should be a string or missing value, got 'float' instead."
+  },
+  {
+    "timestamp": "2026-04-27T12:37:51.137704+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "empty_fallback",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Master data is empty"
+  },
+  {
+    "timestamp": "2026-04-27T12:43:09.305596+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T12:50:07.986523+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "engine_failed_fallback",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Invalid value '925.1' for dtype 'float64'"
+  },
+  {
+    "timestamp": "2026-04-27T13:02:46.643033+05:30",
+    "status": "Failed",
+    "kind": "daily_report",
+    "trigger_source": "empty_fallback",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "recipients": "prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Master data is empty"
+  },
+  {
+    "timestamp": "2026-04-27T13:04:14.971158+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T14:02:49.639663+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T15:34:50.870285+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  }
+]

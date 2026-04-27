@@ -1,0 +1,17 @@
+{
+    "to": "umang.mittal@maqsoftware.com",
+    "cc": "ishitas@maqsoftware.com",
+    "subject": "Review Noida Daily Energy Optimization - {date}",
+    "auto_start": true,
+    "include_sections": {
+        "summary_kpis": true,
+        "unified_table": true,
+        "grid_summary": true,
+        "solar_summary": true,
+        "diesel_summary": true,
+        "inverter_status": true,
+        "raw_data": false
+    },
+    "uploaded_template_path": null,
+    "start_time": "09:00"
+}

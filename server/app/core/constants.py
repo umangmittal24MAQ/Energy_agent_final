@@ -1,0 +1,49 @@
+"""
+Application constants
+"""
+
+# Energy Sources
+ENERGY_SOURCE_GRID = "grid"
+ENERGY_SOURCE_SOLAR = "solar"
+ENERGY_SOURCE_DIESEL = "diesel"
+
+ENERGY_SOURCES = [ENERGY_SOURCE_GRID, ENERGY_SOURCE_SOLAR, ENERGY_SOURCE_DIESEL]
+
+# Time Units
+TIME_UNIT_HOURLY = "hourly"
+TIME_UNIT_DAILY = "daily"
+TIME_UNIT_WEEKLY = "weekly"
+TIME_UNIT_MONTHLY = "monthly"
+
+TIME_UNITS = [TIME_UNIT_HOURLY, TIME_UNIT_DAILY, TIME_UNIT_WEEKLY, TIME_UNIT_MONTHLY]
+
+# Data Retention (days)
+DATA_RETENTION_DAYS_DEFAULT = 90
+DATA_RETENTION_DAYS_HISTORICAL = 365
+
+# Pagination
+DEFAULT_PAGE_SIZE = 100
+MAX_PAGE_SIZE = 1000
+
+# Cache
+CACHE_TTL_SECONDS_DEFAULT = 300  # 5 minutes
+CACHE_TTL_SECONDS_LONG = 3600  # 1 hour
+
+# Scheduler Defaults (Overridden by scheduler_config.json)
+SCHEDULER_REPORT_DEFAULT_TIME = "10:30"
+SCHEDULER_SCRAPER_INTERVAL_MINS = 30
+
+# Email
+EMAIL_REPORT_SUBJECT = "Review Noida Daily Energy Optimization Dashboard"
+EMAIL_RETRY_ATTEMPTS = 3
+EMAIL_RETRY_DELAY_SECONDS = 60
+
+# API
+API_TITLE = "Energy Dashboard API"
+API_VERSION = "1.0.0"
+API_DESCRIPTION = "API for Energy Consumption Monitoring and Analysis - Noida Campus"
+
+# CORS
+CORS_ALLOW_METHODS = ["*"]
+CORS_ALLOW_HEADERS = ["*"]
+CORS_ALLOW_CREDENTIALS = True
