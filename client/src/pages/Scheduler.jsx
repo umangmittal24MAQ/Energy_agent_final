@@ -437,7 +437,9 @@ export default function Scheduler({
 
   async function persistConfiguration(options = {}) {
     if (!isAdmin) {
-      setErrorMsg("Read-only access. Only admins can update scheduler settings.");
+      setErrorMsg(
+        "Read-only access. Only admins can update scheduler settings.",
+      );
       setTimeout(() => setErrorMsg(null), SCHEDULER.TOAST_DURATION_MS);
       return false;
     }
