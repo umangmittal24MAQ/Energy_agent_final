@@ -1,6 +1,6 @@
 {
-    "to": "ojasu@maqsoftware.com",
-    "cc": "vimalv@maqsoftware.com,ramc@maqsoftware.com,amrishs@maqsoftware.com,naveenk@maqsoftware.com,prajwal.khadse@maqsoftware.com,umang.mittal@maqsoftware.com,krishnav@maqsoftware.com,ishitas@maqsoftware.com",
+    "to": "prajwal.khadse@maqsoftware.com",
+    "cc": "umang.mittal@maqsoftware.com,ishitas@maqsoftware.com",
     "subject": "Review Noida Daily Energy Optimization - {date}",
     "auto_start": true,
     "include_sections": {
@@ -13,5 +13,5 @@
         "raw_data": false
     },
     "uploaded_template_path": null,
-    "start_time": "9:00"
+    "start_time": "09:00"
 }

@@ -270,6 +270,77 @@ def _get_peak_automated_solar_units(solar_rows: pd.DataFrame) -> float:
 
     return float(solar_candidates.max())
 
+
+def _compute_solar_units_from_unified(df_solar: pd.DataFrame, for_date: str) -> Optional[float]:
+    """Return max(Today Yesterday Gen, Yesterday final Day Generation) from UnifiedSolarData."""
+    if df_solar is None or df_solar.empty:
+        return None
+
+    work = df_solar.copy()
+    if "Date" not in work.columns:
+        return None
+
+    work["_date"] = pd.to_datetime(work["Date"], errors="coerce").dt.date
+    time_col = next((c for c in work.columns if _normalize_key(c) == "time"), None)
+    if time_col:
+        work["_time"] = pd.to_datetime(work[time_col], errors="coerce")
+    else:
+        work["_time"] = pd.NaT
+
+    target_date = pd.to_datetime(for_date, errors="coerce")
+    if pd.isna(target_date):
+        return None
+    today = target_date.date()
+    yesterday = (target_date - timedelta(days=1)).date()
+
+    def _norm(value: str) -> str:
+        return "".join(ch for ch in str(value).lower() if ch.isalnum())
+
+    ygen_col = next(
+        (
+            c
+            for c in work.columns
+            if _norm(c) in {
+                "yesterdaygen",
+                "yesterdaygenerationkwh",
+                "yesterdaygeneration",
+            }
+        ),
+        None,
+    )
+    daygen_col = next(
+        (
+            c
+            for c in work.columns
+            if _norm(c) in {"daygenerationkwh", "daygeneration"}
+        ),
+        None,
+    )
+
+    today_ygen = 0.0
+    if ygen_col:
+        today_rows = work[work["_date"] == today].copy()
+        if not today_rows.empty:
+            today_rows = today_rows.sort_values("_time")
+            today_ygen = _safe_float(today_rows.iloc[-1].get(ygen_col, 0))
+
+    yday_last_daygen = 0.0
+    if daygen_col:
+        yday_rows = work[work["_date"] == yesterday].copy()
+        if not yday_rows.empty:
+            yday_rows = yday_rows.sort_values("_time")
+            yday_last_daygen = _safe_float(yday_rows.iloc[-1].get(daygen_col, 0))
+
+    selected = max(today_ygen, yday_last_daygen)
+    logger.info(
+        "Solar Units compare from UnifiedSolarData for %s: today[YGen]=%s, yesterday[last DayGen]=%s, selected=%s",
+        for_date,
+        today_ygen,
+        yday_last_daygen,
+        selected,
+    )
+    return float(selected)
+
 # REPLACE WITH THIS
 def process_master_data(
     operator_date: str,
@@ -315,39 +386,25 @@ def process_master_data(
     grid_units = _safe_float(_get_fuzzy(grid_today, "gridunits", 0))
     grid_cost_inr = _safe_float(_get_fuzzy(grid_today, "consumedin", 0))
     
-    # 5. Extract Solar Data (WITH SMART FALLBACK)
+    # 5. Extract Solar Data from UnifiedSolarData using requested max logic.
     automated_solar_units = 0.0
     live_solar_snapshot = _extract_live_solar_snapshot(solar_rows)
-    if not solar_rows.empty:
-        automated_solar_units = _get_peak_automated_solar_units(solar_rows)
-    else:
-        logger.warning(f"No Automated Solar data found for {solar_date} in UnifiedSolarData.")
+    calculated_solar_units = _compute_solar_units_from_unified(df_solar, operator_date)
+    if calculated_solar_units is not None:
+        automated_solar_units = calculated_solar_units
 
-    manual_solar_units = _safe_float(_get_fuzzy(grid_today, "solar", 0))
-
-    if automated_solar_units > 0 and manual_solar_units > 0:
-        if manual_solar_units > automated_solar_units:
-            logger.warning(
-                "Automated solar (%s kWh) is lower than manual operator entry (%s kWh). Using manual value.",
-                automated_solar_units,
-                manual_solar_units,
-            )
-            solar_units = manual_solar_units
-            solar_source = "Manual Override"
-        else:
-            solar_units = automated_solar_units
-            solar_source = "Automated Scraper"
-    elif automated_solar_units > 0:
+    if automated_solar_units > 0:
         solar_units = automated_solar_units
-        solar_source = "Automated Scraper"
-    elif manual_solar_units > 0:
-        logger.warning(f"Automated solar was 0 or missing. Falling back to Manual Operator Entry ({manual_solar_units} kWh).")
-        solar_units = manual_solar_units
-        solar_source = "Manual Fallback"
+        solar_source = "UnifiedSolarData Max Rule"
     else:
-        logger.warning(f" No solar data found from automated OR manual sources. Defaulting to 0.")
-        solar_units = 0.0
-        solar_source = "None Found"
+        logger.warning(
+            "UnifiedSolarData max-rule value is missing/zero for %s. Falling back to day peak for %s.",
+            operator_date,
+            solar_date,
+        )
+        fallback_peak = _get_peak_automated_solar_units(solar_rows) if not solar_rows.empty else 0.0
+        solar_units = fallback_peak
+        solar_source = "Automated Day-Peak Fallback"
         
     # 6. Calculate True Totals
     total_units = grid_units + solar_units

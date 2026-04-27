@@ -25,10 +25,15 @@ import {
   Pencil,
   Settings,
 } from "lucide-react";
+import { useMsal } from "@azure/msal-react";
 import { SCHEDULER, DATE_LOCALE } from "../lib/constants";
 
 const RECIPIENTS_FALLBACK_KEY = "scheduler-recipients-fallback";
 const CC_FALLBACK_KEY = "scheduler-cc-fallback";
+const AUTHORIZED_ADMINS = [
+  "umang.mittal@maqsoftware.com",
+  "prajwal.khadse@maqsoftware.com",
+];
 
 function getDefaultTime() {
   return "09:00";
@@ -115,6 +120,10 @@ export default function Scheduler({
   settingsOnly = false,
   asSettings = false,
 }) {
+  const { accounts } = useMsal();
+  const currentUserEmail = accounts?.[0]?.username?.toLowerCase() || "";
+  const isAdmin = AUTHORIZED_ADMINS.includes(currentUserEmail);
+
   const today = useMemo(
     () =>
       new Date().toLocaleDateString(DATE_LOCALE, {
@@ -326,6 +335,7 @@ export default function Scheduler({
   }, [settingsOnly]);
 
   function addRecipientFromInput() {
+    if (!isAdmin) return;
     const value = recipientInput.trim();
     if (!value) return;
     if (!isValidEmail(value)) {
@@ -347,16 +357,19 @@ export default function Scheduler({
   }
 
   function removeRecipient(index) {
+    if (!isAdmin) return;
     setRecipients((prev) => prev.filter((_, idx) => idx !== index));
   }
 
   function startRecipientEdit(index) {
+    if (!isAdmin) return;
     setEditingRecipientIndex(index);
     setEditingRecipientValue(toRecipients[index] || "");
     setRecipientError(null);
   }
 
   function saveRecipientEdit() {
+    if (!isAdmin) return;
     const value = editingRecipientValue.trim();
     if (!value || !isValidEmail(value)) {
       setRecipientError("Please enter a valid email address.");
@@ -385,6 +398,7 @@ export default function Scheduler({
   }
 
   function addCcFromInput() {
+    if (!isAdmin) return;
     const value = ccInput.trim();
     if (!value) return;
     if (!isValidEmail(value)) {
@@ -406,6 +420,7 @@ export default function Scheduler({
   }
 
   function removeCc(index) {
+    if (!isAdmin) return;
     setCc((prev) => prev.filter((_, idx) => idx !== index));
   }
 
@@ -421,6 +436,12 @@ export default function Scheduler({
   }
 
   async function persistConfiguration(options = {}) {
+    if (!isAdmin) {
+      setErrorMsg("Read-only access. Only admins can update scheduler settings.");
+      setTimeout(() => setErrorMsg(null), SCHEDULER.TOAST_DURATION_MS);
+      return false;
+    }
+
     const { showSuccess = true, autoStartOverride = null } = options;
     if (toRecipients.length === 0) {
       setErrorMsg("Please add at least one recipient.");
@@ -469,6 +490,7 @@ export default function Scheduler({
   }
 
   async function handleSaveConfiguration() {
+    if (!isAdmin) return;
     const saved = await persistConfiguration({
       showSuccess: true,
       autoStartOverride: true,
@@ -483,6 +505,7 @@ export default function Scheduler({
   }
 
   async function handleSendNow() {
+    if (!isAdmin) return;
     if (toRecipients.length === 0) return;
     const previousTopTimestamp = sendHistory?.[0]?.timestamp || null;
 
@@ -527,6 +550,7 @@ export default function Scheduler({
   }
 
   async function handleStopScheduler() {
+    if (!isAdmin) return;
     setScheduling(true);
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -582,6 +606,7 @@ export default function Scheduler({
                 {email}
                 <button
                   onClick={() => startRecipientEdit(idx)}
+                  disabled={!isAdmin}
                   className="text-blue-500 hover:text-blue-700"
                   title="Edit recipient"
                 >
@@ -589,6 +614,7 @@ export default function Scheduler({
                 </button>
                 <button
                   onClick={() => removeRecipient(idx)}
+                  disabled={!isAdmin}
                   className="text-blue-500 hover:text-red-600"
                   title="Remove recipient"
                 >
@@ -605,10 +631,12 @@ export default function Scheduler({
               type="email"
               value={editingRecipientValue}
               onChange={(e) => setEditingRecipientValue(e.target.value)}
+              disabled={!isAdmin}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
             <button
               onClick={saveRecipientEdit}
+              disabled={!isAdmin}
               className="px-3 py-2 text-xs font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700"
             >
               Save
@@ -618,6 +646,7 @@ export default function Scheduler({
                 setEditingRecipientIndex(-1);
                 setEditingRecipientValue("");
               }}
+              disabled={!isAdmin}
               className="px-3 py-2 text-xs font-medium rounded-md border border-slate-200 hover:bg-slate-100"
             >
               Cancel
@@ -633,6 +662,7 @@ export default function Scheduler({
               setRecipientInput(e.target.value);
               if (recipientError) setRecipientError(null);
             }}
+            disabled={!isAdmin}
             placeholder="Add recipient email"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             onKeyDown={(e) => {
@@ -644,6 +674,7 @@ export default function Scheduler({
           />
           <button
             onClick={addRecipientFromInput}
+            disabled={!isAdmin}
             className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-md border border-slate-200 hover:bg-slate-100"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -673,6 +704,7 @@ export default function Scheduler({
                 {email}
                 <button
                   onClick={() => removeCc(idx)}
+                  disabled={!isAdmin}
                   className="text-slate-400 hover:text-red-600"
                   title="Remove CC"
                 >
@@ -691,6 +723,7 @@ export default function Scheduler({
               setCcInput(e.target.value);
               if (ccError) setCcError(null);
             }}
+            disabled={!isAdmin}
             placeholder="Add CC email"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             onKeyDown={(e) => {
@@ -702,6 +735,7 @@ export default function Scheduler({
           />
           <button
             onClick={addCcFromInput}
+            disabled={!isAdmin}
             className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium rounded-md border border-slate-200 hover:bg-slate-100"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -734,6 +768,7 @@ export default function Scheduler({
             type="time"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
+            disabled={!isAdmin}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-md outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
         </div>
@@ -750,7 +785,7 @@ export default function Scheduler({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 [&>button]:px-3 [&>button]:py-2">
           <button
             onClick={handleSaveConfiguration}
-            disabled={saving || scheduling || sending}
+            disabled={saving || scheduling || sending || !isAdmin}
             className="inline-flex items-center justify-center gap-2 w-full bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4" />
@@ -758,7 +793,7 @@ export default function Scheduler({
           </button>
           <button
             onClick={handleStopScheduler}
-            disabled={scheduling || saving || sending}
+            disabled={scheduling || saving || sending || !isAdmin}
             title={`Stop Scheduler — Today: ${today}`}
             className="inline-flex items-center justify-center gap-2 w-full border border-red-200 text-red-600 text-sm font-medium rounded-md hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -767,7 +802,7 @@ export default function Scheduler({
           </button>
           <button
             onClick={handleSendNow}
-            disabled={sending || saving || scheduling}
+            disabled={sending || saving || scheduling || !isAdmin}
             className="inline-flex items-center justify-center gap-2 w-full border border-slate-300 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           >
             {sending ? (
@@ -891,6 +926,17 @@ export default function Scheduler({
             Settings
           </h1>
           <p className="text-xs text-slate-500 mt-1">Scheduler Settings</p>
+          <div className="mt-2">
+            {isAdmin ? (
+              <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
+                Admin Access (Edit Mode)
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                Read-Only Access
+              </span>
+            )}
+          </div>
         </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white px-6 py-5 animate-fade-in">
@@ -905,6 +951,17 @@ export default function Scheduler({
                   Scheduler Settings
                 </p>
               )}
+              <div className="mt-2">
+                {isAdmin ? (
+                  <span className="text-sm font-medium text-green-600 bg-green-50 px-2 py-1 rounded">
+                    Admin Access (Edit Mode)
+                  </span>
+                ) : (
+                  <span className="text-sm font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                    Read-Only Access
+                  </span>
+                )}
+              </div>
             </div>
             <span
               className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium border ${

@@ -177,6 +177,17 @@ def _compute_yesterday_generation_for_email(sp_service: Any, for_date: Optional[
         logger.warning(f"Failed computing Yesterday Generation override: {e}")
         return None
 
+
+def _coerce_for_column(df: pd.DataFrame, column: str, value: float) -> Any:
+    """Return a dtype-compatible value for dataframe column assignment."""
+    try:
+        dtype = df[column].dtype
+        if pd.api.types.is_string_dtype(dtype):
+            return str(value)
+        return float(value)
+    except Exception:
+        return str(value)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
 # ──────────────────────────────────────────────────────────────────────────────
@@ -264,6 +275,18 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         if "Yesterday Generation (kWh)" not in master_df.columns:
             master_df["Yesterday Generation (kWh)"] = ""
 
+        solar_units_source_col = _find_column(
+            master_df,
+            [
+                "Solar Units Consumed(KWh)",
+                "Solar Units Consumed (KWh)",
+                "Solar Units Consumed (kWh)",
+            ],
+        )
+        if not solar_units_source_col:
+            solar_units_source_col = "Solar Units Consumed(KWh)"
+            master_df[solar_units_source_col] = ""
+
         parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
         updated_any = False
         for r_date in report_dates:
@@ -272,14 +295,20 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
                 continue
             mask = parsed_master_dates == r_date
             if mask.any():
-                master_df.loc[mask, "Yesterday Generation (kWh)"] = selected_gen
+                ygen_value = _coerce_for_column(master_df, "Yesterday Generation (kWh)", selected_gen)
+                solar_value = _coerce_for_column(master_df, solar_units_source_col, selected_gen)
+                master_df.loc[mask, "Yesterday Generation (kWh)"] = ygen_value
+                master_df.loc[mask, solar_units_source_col] = solar_value
                 updated_any = True
 
         # Safety fallback: if no report-date row was found, update the latest row.
         if not updated_any and not master_df.empty:
             fallback_gen = _compute_yesterday_generation_for_email(sp_service)
             if fallback_gen is not None:
-                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = fallback_gen
+                ygen_value = _coerce_for_column(master_df, "Yesterday Generation (kWh)", fallback_gen)
+                solar_value = _coerce_for_column(master_df, solar_units_source_col, fallback_gen)
+                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = ygen_value
+                master_df.loc[master_df.index[-1], solar_units_source_col] = solar_value
 
         # --- 2. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
@@ -441,7 +470,6 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
             "Day":                                     display_day,
             "Time":                                    clean_time,
             "Ambient Temperature (°C)":                safe_row.get("Ambient Temperature °C", ""),
-            "Yesterday Generation (kWh)":              safe_row.get("Yesterday Generation (kWh)", ""),
             "Grid Units Consumed (kWh)":               safe_row.get("Grid Units Consumed (KWh)", ""),
             "Solar Units Consumed (kWh)":              safe_row.get("Solar Units Consumed(KWh)", ""),
             "Total Units Consumed (kWh)":              safe_row.get("Total Units Consumed (KWh)", ""),
@@ -459,13 +487,12 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
 
     # 3. Format the HTML Table
     right_aligned_columns = {
-        "Ambient Temperature (°C)", "Yesterday Generation (kWh)", "Grid Units Consumed (kWh)", "Solar Units Consumed (kWh)",
+        "Ambient Temperature (°C)", "Grid Units Consumed (kWh)", "Solar Units Consumed (kWh)",
         "Total Units Consumed (kWh)", "Total Cost (INR)", "Solar Cost Savings (INR)",
         "Panels Cleaned", "Diesel Consumed (Litres)",
         "Water Treated through STP (kilo Litres)", "Water Treated through WTP (kilo Litres)"
     }
     decimals_by_column = {
-        "Yesterday Generation (kWh)": 2,
         "Grid Units Consumed (kWh)": 0, "Solar Units Consumed (kWh)": 0, "Total Units Consumed (kWh)": 0,
         "Total Cost (INR)": 2, "Solar Cost Savings (INR)": 2, "Panels Cleaned": 0,
         "Diesel Consumed (Litres)": 0, "Water Treated through STP (kilo Litres)": 0,
@@ -654,3 +681,5 @@ def send_operator_reminder() -> Dict[str, Any]:
             }
         )
         return {"status": "Failed", "error": str(e)}
+
+
