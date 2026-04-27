@@ -3,12 +3,10 @@ master_data_engine.py
 =====================
 Aggregates daily data from Grid_Diesel and Unified_Solar into the Master-data Excel file.
 Designed to run once daily (e.g., at 08:00 AM) to process the previous day's data.
-
-Usage: 
-  python master_data_engine.py              # Processes yesterday's data
-  python master_data_engine.py 2026-04-08   # Processes a specific date
+Usage:
+  python master_data_engine.py               # Processes yesterday's data
+  python master_data_engine.py 2026-04-08    # Processes a specific date
 """
-
 import os
 import sys
 import io
@@ -16,7 +14,6 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
-
 import requests
 import pandas as pd
 from dotenv import load_dotenv
@@ -40,7 +37,6 @@ def _load_env() -> None:
             load_dotenv(dotenv_path=env_file)
             return
     load_dotenv()
-
 _load_env()
 
 TENANT_ID = os.getenv("SHAREPOINT_TENANT_ID", "").strip()
@@ -52,7 +48,6 @@ HOSTNAME = "testmaq.sharepoint.com"
 SITE_PATH = "/Admin"
 DRIVE_NAME = "Private"
 BASE_FOLDER = "22. Facilities Report/MIPL/Noida/2. Electrical data/"
-
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 _access_token: Optional[str] = None
@@ -126,7 +121,6 @@ def download_excel(filename: str) -> pd.DataFrame:
                 break
     else:
         df.columns = [str(c).strip().replace('\n', ' ') for c in df.columns]
-        
     return df
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -160,18 +154,14 @@ def _get_fuzzy(row: pd.Series, keyword: str, default: any = ""):
             return val
     return default
 
-
 def _normalize_key(value: str) -> str:
     return str(value).lower().replace(" ", "").replace("_", "").replace("\n", "")
 
-
 def _get_from_candidates(row: pd.Series, candidates: list[str], default: any = ""):
-    """Get value from row by exact normalized candidate column names."""
     lookup: dict[str, str] = {}
     for col in row.index:
         key = _normalize_key(col)
         lookup.setdefault(key, str(col))
-
     for candidate in candidates:
         source_col = lookup.get(_normalize_key(candidate))
         if not source_col:
@@ -181,156 +171,65 @@ def _get_from_candidates(row: pd.Series, candidates: list[str], default: any = "
             continue
         return val
     return default
-
-
-def _extract_live_solar_snapshot(solar_rows: pd.DataFrame) -> dict[str, any]:
-    """Extract latest SMB/Inverter values and statuses from UnifiedSolarData rows."""
-    snapshot = {
-        "Day Generation (kWh)": "",
-    }
-    for i in range(1, 6):
-        snapshot[f"SMB{i}"] = ""
-        snapshot[f"SMB{i}_status"] = ""
-        snapshot[f"Inverter{i}"] = ""
-        snapshot[f"Inverter{i}_status"] = ""
-
-    if solar_rows is None or solar_rows.empty:
-        return snapshot
-
-    latest_rows = solar_rows.copy()
-    if "Time" in latest_rows.columns:
-        latest_rows["_parsed_time"] = pd.to_datetime(latest_rows["Time"], errors="coerce")
-        latest_rows = latest_rows.sort_values("_parsed_time")
-
-    latest = latest_rows.iloc[-1]
-    snapshot["Day Generation (kWh)"] = _get_from_candidates(
-        latest,
-        ["Day Generation (kWh)", "DayGeneration", "Day Generation"],
-        "",
-    )
-
-    for i in range(1, 6):
-        snapshot[f"SMB{i}"] = _get_from_candidates(
-            latest,
-            [f"SMB{i}", f"SMB {i}", f"SMB_{i}"],
-            "",
-        )
-        snapshot[f"SMB{i}_status"] = _get_from_candidates(
-            latest,
-            [
-                f"SMB{i}_status",
-                f"SMB{i} status",
-                f"SMB{i} Status",
-                f"SMB {i}_status",
-                f"SMB {i} status",
-                f"SMB {i} Status",
-            ],
-            "",
-        )
-        snapshot[f"Inverter{i}"] = _get_from_candidates(
-            latest,
-            [f"Inverter{i}", f"Inverter {i}", f"Inverter_{i}", f"INV_{i}"],
-            "",
-        )
-        snapshot[f"Inverter{i}_status"] = _get_from_candidates(
-            latest,
-            [
-                f"Inverter{i}_status",
-                f"Inverter{i} status",
-                f"Inverter{i} Status",
-                f"Inverter {i}_status",
-                f"Inverter {i} status",
-                f"Inverter {i} Status",
-            ],
-            "",
-        )
-
-    return snapshot
-
-
+ 
 def _get_peak_automated_solar_units(solar_rows: pd.DataFrame) -> float:
-    """Return the peak cumulative automated solar units for the day."""
     if solar_rows is None or solar_rows.empty:
         return 0.0
-
     candidate_rows = solar_rows
     if "Time" in solar_rows.columns:
         parsed_times = pd.to_datetime(solar_rows["Time"], errors="coerce").dt.strftime("%H:%M")
         upto_1930 = solar_rows[parsed_times.notna() & (parsed_times <= "19:30")]
         if not upto_1930.empty:
             candidate_rows = upto_1930
-
     solar_candidates = candidate_rows.apply(
         lambda row: _safe_float(_get_fuzzy(row, "daygeneration", _get_fuzzy(row, "solar", 0))),
         axis=1,
     )
-
     if solar_candidates.empty:
         return 0.0
-
     return float(solar_candidates.max())
 
-
 def _compute_solar_units_from_unified(df_solar: pd.DataFrame, for_date: str) -> Optional[float]:
-    """Return max(Today Yesterday Gen, Yesterday final Day Generation) from UnifiedSolarData."""
     if df_solar is None or df_solar.empty:
         return None
-
     work = df_solar.copy()
     if "Date" not in work.columns:
         return None
-
+        
     work["_date"] = pd.to_datetime(work["Date"], errors="coerce").dt.date
     time_col = next((c for c in work.columns if _normalize_key(c) == "time"), None)
     if time_col:
         work["_time"] = pd.to_datetime(work[time_col], errors="coerce")
     else:
         work["_time"] = pd.NaT
-
+        
     target_date = pd.to_datetime(for_date, errors="coerce")
     if pd.isna(target_date):
         return None
+        
     today = target_date.date()
     yesterday = (target_date - timedelta(days=1)).date()
-
+    
     def _norm(value: str) -> str:
         return "".join(ch for ch in str(value).lower() if ch.isalnum())
-
-    ygen_col = next(
-        (
-            c
-            for c in work.columns
-            if _norm(c) in {
-                "yesterdaygen",
-                "yesterdaygenerationkwh",
-                "yesterdaygeneration",
-            }
-        ),
-        None,
-    )
-    daygen_col = next(
-        (
-            c
-            for c in work.columns
-            if _norm(c) in {"daygenerationkwh", "daygeneration"}
-        ),
-        None,
-    )
-
+        
+    ygen_col = next((c for c in work.columns if _norm(c) in {"yesterdaygen", "yesterdaygenerationkwh", "yesterdaygeneration"}), None)
+    daygen_col = next((c for c in work.columns if _norm(c) in {"daygenerationkwh", "daygeneration"}), None)
+    
     today_ygen = 0.0
     if ygen_col:
         today_rows = work[work["_date"] == today].copy()
         if not today_rows.empty:
             today_rows = today_rows.sort_values("_time")
             today_ygen = _safe_float(today_rows.iloc[-1].get(ygen_col, 0))
-
+            
     yday_last_daygen = 0.0
     if daygen_col:
         yday_rows = work[work["_date"] == yesterday].copy()
         if not yday_rows.empty:
             yday_rows = yday_rows.sort_values("_time")
             yday_last_daygen = _safe_float(yday_rows.iloc[-1].get(daygen_col, 0))
-
+            
     selected = max(today_ygen, yday_last_daygen)
     logger.info(
         "Solar Units compare from UnifiedSolarData for %s: today[YGen]=%s, yesterday[last DayGen]=%s, selected=%s",
@@ -341,18 +240,16 @@ def _compute_solar_units_from_unified(df_solar: pd.DataFrame, for_date: str) -> 
     )
     return float(selected)
 
-# REPLACE WITH THIS
 def process_master_data(
     operator_date: str,
     solar_date: str,
     fallback_operator_date: Optional[str] = None,
 ) -> None:
     logger.info(f"=== Master Data Engine: operator_date={operator_date}, solar_date={solar_date} ===")
-        
+    
     # 1. Download BOTH source files
     logger.info("Downloading Electrical Optimization (1).xlsx (Operator Data)...")
     df_grid = download_excel("Electrical Optimization (1).xlsx")
-    
     logger.info("Downloading UnifiedSolarData.xlsx (Automated Solar Data)...")
     df_solar = download_excel("UnifiedSolarData.xlsx")
     
@@ -360,10 +257,10 @@ def process_master_data(
     df_grid['Date'] = _robust_parse_date(df_grid['Date'])
     df_solar['Date'] = _robust_parse_date(df_solar['Date'])
     
-    # 3. Filter for the target date
+    # 3. Filter for the exact requested target dates (Avoids Monday duplicate issues)
     grid_rows  = df_grid[df_grid['Date'] == operator_date]   # operator wrote today's date
     solar_rows = df_solar[df_solar['Date'] == solar_date]    # scraper ran on yesterday
-
+    
     grid_source_date = operator_date
     if grid_rows.empty and fallback_operator_date:
         fallback_rows = df_grid[df_grid['Date'] == fallback_operator_date]
@@ -375,7 +272,7 @@ def process_master_data(
                 operator_date,
                 fallback_operator_date,
             )
-
+            
     if grid_rows.empty:
         logger.error(f"❌ No Operator Grid/Diesel data found for {operator_date}. Aborting.")
         return
@@ -388,11 +285,10 @@ def process_master_data(
     
     # 5. Extract Solar Data from UnifiedSolarData using requested max logic.
     automated_solar_units = 0.0
-    live_solar_snapshot = _extract_live_solar_snapshot(solar_rows)
     calculated_solar_units = _compute_solar_units_from_unified(df_solar, operator_date)
     if calculated_solar_units is not None:
         automated_solar_units = calculated_solar_units
-
+        
     if automated_solar_units > 0:
         solar_units = automated_solar_units
         solar_source = "UnifiedSolarData Max Rule"
@@ -418,12 +314,13 @@ def process_master_data(
     logger.info(f"   Grid Cost (INR): ₹{grid_cost_inr:,.2f}")
     logger.info(f"   Calculated Savings (INR): ₹{energy_savings_inr:,.2f}")
     
-    consumption_dt = pd.to_datetime(solar_date) 
+    # 🚀 THE FIX: Determine the Day strictly using the Operator Date
+    consumption_dt = pd.to_datetime(operator_date)
     
     # 7. Build the Master Row
     master_row = {
         "Date": operator_date,                      
-        "Day":  consumption_dt.strftime("%A"),
+        "Day":  consumption_dt.strftime("%A"), # This now correctly outputs "Monday" on Mondays!
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
@@ -442,15 +339,13 @@ def process_master_data(
         "Inverter_4": _get_fuzzy(grid_today, "inv_4", ""),
         "Inverter_5": _get_fuzzy(grid_today, "inv_5", ""),
     }
-    master_row.update(live_solar_snapshot)
     
     # 8. Push to Master Data
     logger.info("Downloading Master-data.xlsx...")
     df_master = download_excel("Master-data.xlsx")
-    
     df_master['Date_Str'] = _robust_parse_date(df_master['Date'])
     
-    # FIX: The deduplication check must match the date we are inserting!
+    # 🚀 The deduplication check cleanly matches the exact date inserted.
     df_master = df_master[df_master['Date_Str'] != operator_date].drop(columns=['Date_Str'])
     
     new_df = pd.DataFrame([master_row])
@@ -459,21 +354,23 @@ def process_master_data(
     logger.info("Uploading updated Master-data.xlsx to SharePoint...")
     upload_excel("Master-data.xlsx", df_master)
     logger.info("✅ Master data synchronization SUCCESS!")
-    
-# REPLACE WITH THIS
+
 if __name__ == "__main__":
     import sys
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
     IST = ZoneInfo("Asia/Kolkata")
     now = datetime.now(IST)
+    
     # argv[1] = operator_date (TODAY)      e.g. 2026-04-13
     # argv[2] = solar_date    (YESTERDAY)  e.g. 2026-04-12
     # argv[3] = fallback_operator_date      e.g. 2026-04-13
     operator_date = sys.argv[1] if len(sys.argv) > 1 else now.strftime("%Y-%m-%d")
     solar_date    = sys.argv[2] if len(sys.argv) > 2 else (now - timedelta(days=1)).strftime("%Y-%m-%d")
     fallback_operator_date = sys.argv[3] if len(sys.argv) > 3 else None
-    try: process_master_data(operator_date, solar_date, fallback_operator_date)
+    
+    try: 
+        process_master_data(operator_date, solar_date, fallback_operator_date)
     except Exception as e:
         logger.error(f"❌ Master Engine Failed: {e}")
         sys.exit(1)

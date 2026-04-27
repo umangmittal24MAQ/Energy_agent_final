@@ -460,5 +460,145 @@
     "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com",
     "attachment": "Energy_Report_20260427.xlsx",
     "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T16:13:09.613384+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T16:25:27.931954+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "paragk@maqsoftware.com, shaileshl@maqsoftware.com, ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 7 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:29:56.618303+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T16:32:24.379429+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "paragk@maqsoftware.com, shaileshl@maqsoftware.com, ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 7 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:32:34.540294+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "paragk@maqsoftware.com, shaileshl@maqsoftware.com, ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 7 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:32:44.659384+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "paragk@maqsoftware.com, shaileshl@maqsoftware.com, ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 7 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:33:47.225196+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 5 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:33:58.201185+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 5 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:34:08.109369+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 5 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:34:30.751655+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "empty_fallback",
+    "subject": "\u26a0\ufe0f ACTION REQUIRED: Missing Data - Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T16:40:07.854139+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 5 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:41:35.110095+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-04-27T16:53:07.006065+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "ojasu@maqsoftware.com, prajwal.khadse@maqsoftware.com, umang.mittal@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 5 recipients"
+  },
+  {
+    "timestamp": "2026-04-27T16:54:48.245232+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "early_submission",
+    "subject": "Review Noida Daily Energy Optimization - April 27, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, ishitas@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260427.xlsx",
+    "notes": "Daily report email sent"
   }
 ]

@@ -53,18 +53,22 @@ def normalizeIssueText(value: Any) -> str:
     return text.lower()[:1].upper() + text.lower()[1:]
 
 
-REMINDER_TO_DISPLAY = [
-    "Parag Kulshrestha | MAQ Software <paragk@maqsoftware.com>",
-    "Shailesh | MAQ Software <shaileshl@maqsoftware.com>",
-    "Ojas Upadhyay | MAQ Software <ojasu@maqsoftware.com>",
-]
+def _parse_email_list_from_env(env_value: str) -> list[str]:
+    """Parse comma-separated email addresses from environment variable."""
+    if not env_value:
+        return []
+    # Split by comma and strip whitespace, filter empty strings
+    return [email.strip() for email in env_value.split(',') if email.strip()]
 
-REMINDER_CC_DISPLAY = [
-    "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>",
-    "Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>",
-    "Ishita Singh | MAQ Software <ishitas@maqsoftware.com>",
-    "Umang Mittal | MAQ SOftware <umang.mittal@maqsoftware.com>"
-]
+
+# Load reminder email lists from environment variables
+REMINDER_TO_DISPLAY = _parse_email_list_from_env(
+    os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
+)
+
+REMINDER_CC_DISPLAY = _parse_email_list_from_env(
+    os.getenv("CC_EMAIL", "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>,Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>,Ishita Singh | MAQ Software <ishitas@maqsoftware.com>,Umang Mittal | MAQ Software <umang.mittal@maqsoftware.com>")
+)
 
 
 def _emails_from_display(items: list[str]) -> list[str]:

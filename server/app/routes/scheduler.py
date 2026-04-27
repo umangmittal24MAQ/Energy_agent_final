@@ -27,8 +27,10 @@ router = APIRouter(tags=["Scheduler Configuration"])
 # Security: Role-Based Access Control (RBAC)
 # ──────────────────────────────────────────────────────────────────────────────
 AUTHORIZED_ADMINS = [
-    
-    "prajwal.khadse@maqsoftware.com"
+    "umang.mittal@maqsoftware.com",
+    "prajwal.khadse@maqsoftware.com",
+    "krishnav@maqsoftware.com",
+    "ishitas@maqsoftware.com"
 ]
 
 def verify_admin(current_user: dict = Depends(get_current_user)) -> dict:
