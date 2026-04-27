@@ -623,6 +623,39 @@ def update_excel_in_memory(file_bytes: bytes, new_row: Dict) -> bytes:
     out_bytes = buf.read()
     logger.info(f"[DEBUG] update_excel_in_memory: Excel serialization complete. Output size is {len(out_bytes)} bytes.")
     return out_bytes
+    
+    
+import json
+
+CACHE_FILE = SCRIPT_DIR / "solar_offline_cache.json"
+
+def _save_to_cache(row: Dict) -> None:
+    """Save a failed row to a local JSON file."""
+    cache = []
+    if CACHE_FILE.exists():
+        try:
+            with open(CACHE_FILE, "r") as f:
+                cache = json.load(f)
+        except json.JSONDecodeError:
+            pass
+    cache.append(row)
+    with open(CACHE_FILE, "w") as f:
+        json.dump(cache, f, indent=4)
+    logger.info(f"Row saved to offline cache. Total pending rows: {len(cache)}")
+
+def _load_and_clear_cache() -> List[Dict]:
+    """Load pending rows and clear the cache file."""
+    if not CACHE_FILE.exists():
+        return []
+    try:
+        with open(CACHE_FILE, "r") as f:
+            cache = json.load(f)
+        CACHE_FILE.unlink() # Delete the file after reading
+        logger.info(f"Loaded {len(cache)} rows from offline cache.")
+        return cache
+    except Exception as e:
+        logger.error(f"Failed to read cache: {e}")
+        return []
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Main
@@ -630,40 +663,42 @@ def update_excel_in_memory(file_bytes: bytes, new_row: Dict) -> bytes:
 
 def main() -> None:
     logger.info("=== SuryaLogix → SharePoint Excel Scraper starting ===")
-    logger.info(f"Headless  : {HEADLESS}  (set SURYALOG_HEADLESS=false in .env to watch the browser)")
-    logger.info(f"Login ID  : {SURYALOG_LOGIN_ID!r}  ← empty means .env not found or key missing")
-    logger.info(f"Password  : {'SET ✓' if SURYALOG_PASSWORD else 'EMPTY ← login will fail!'}")
-
-    logger.info("[DEBUG] Main Step 1: Commencing run_scraper()...")
+    
+    # 1. Scrape the data
     raw_data = run_scraper()
-
-    logger.info("[DEBUG] Main Step 2: Commencing _extract_row()...")
     try:
-        row = _extract_row(raw_data)
-        logger.info(f"✓ Slot: {row['Date']} {row['Time']}")
-        logger.info(
-            f"  DC={row.get('DC Power (kW)', 'N/A')} kW  "
-            f"AC={row.get('AC Power (kW)', 'N/A')} kW  "
-            f"DayGen={row.get('Day Generation (kWh)', 'N/A')} kWh  "
-            f"Meter VLL={row.get('Voltage Phase-to-Phase (V)', 'N/A')} V"
-        )
+        current_row = _extract_row(raw_data)
     except ValueError as exc:
         logger.error(f"❌ {exc}")
-        logger.info("Skipping SharePoint upload for this cycle.")
         sys.exit(1)
 
-    logger.info("[DEBUG] Main Step 3: Read -> Modify -> Write sequence to SharePoint...")
+    # 2. Check if we have old data that failed to upload previously
+    pending_rows = _load_and_clear_cache()
+    
+    # Combine old failed rows with today's new row
+    all_rows_to_upload = pending_rows + [current_row]
+
+    # 3. Read -> Modify -> Write sequence
     try:
         logger.info("Downloading UnifiedSolarData.xlsx from SharePoint…")
-        original = _download_excel()
-        updated  = update_excel_in_memory(original, row)
+        file_bytes = _download_excel()
+        
+        # Apply all rows to the Excel file
+        for r in all_rows_to_upload:
+            file_bytes = update_excel_in_memory(file_bytes, r)
+            
         logger.info("Uploading updated file back to SharePoint…")
-        _upload_excel_with_retry(updated)
+        _upload_excel_with_retry(file_bytes)
         logger.info("✅ SharePoint upload SUCCESS!")
+        
     except Exception as exc:
         logger.error(f"❌ SharePoint pipeline FAILED: {exc}")
+        
+        # THE FIX: If it fails (e.g., file locked > 5 mins), save ALL rows to the cache for next time
+        for r in all_rows_to_upload:
+            _save_to_cache(r)
+            
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
