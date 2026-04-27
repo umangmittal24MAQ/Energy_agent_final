@@ -53,7 +53,6 @@ def normalizeIssueText(value: Any) -> str:
     return text.lower()[:1].upper() + text.lower()[1:]
 
 
-<<<<<<< HEAD
 REMINDER_TO_DISPLAY = [
     "Parag Kulshrestha | MAQ Software <paragk@maqsoftware.com>",
     "Shailesh | MAQ Software <shaileshl@maqsoftware.com>",
@@ -95,7 +94,7 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
             json.dump(history, f, indent=2)
     except Exception as exc:
         logger.warning(f"Failed to append scheduler history entry: {exc}")
-=======
+
 def _normalize_col_name(name: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(name).lower())
 
@@ -108,11 +107,13 @@ def _find_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
     return None
 
 
-def _compute_yesterday_generation_for_email(sp_service: Any) -> Optional[float]:
+def _compute_yesterday_generation_for_email(sp_service: Any, for_date: Optional[Any] = None) -> Optional[float]:
     """
     Compare two UnifiedSolarData values and return the higher one:
-    1) Today's "Yesterday Gen"
-    2) Yesterday's final "Day Generation (kWh)"
+    1) for_date's "Yesterday Gen"
+    2) (for_date - 1)'s final "Day Generation (kWh)"
+
+    When for_date is None, defaults to IST today.
     """
     try:
         unified_df = sp_service.fetch_sheet_data("unified_solar")
@@ -144,7 +145,10 @@ def _compute_yesterday_generation_for_email(sp_service: Any) -> Optional[float]:
         parsed_date = pd.to_datetime(df[date_col], errors="coerce").dt.date
         parsed_time = pd.to_datetime(df[time_col], errors="coerce") if time_col else pd.Series(pd.NaT, index=df.index)
 
-        ist_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        if for_date is not None:
+            ist_today = pd.to_datetime(for_date).date()
+        else:
+            ist_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
         ist_yesterday = ist_today - timedelta(days=1)
 
         val_today_ygen = 0.0
@@ -172,7 +176,6 @@ def _compute_yesterday_generation_for_email(sp_service: Any) -> Optional[float]:
     except Exception as e:
         logger.warning(f"Failed computing Yesterday Generation override: {e}")
         return None
->>>>>>> 40f20ea (update)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
@@ -252,25 +255,31 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
 
         # --- 1.5 OVERRIDE YESTERDAY GENERATION FOR EMAIL CONTENT ---
-        selected_yesterday_gen = _compute_yesterday_generation_for_email(sp_service)
-        if selected_yesterday_gen is not None:
-            if "Yesterday Generation (kWh)" not in master_df.columns:
-                master_df["Yesterday Generation (kWh)"] = ""
+        # Determine which dates the report covers.
+        report_dates = [today.date()]
+        if today.weekday() == 0:
+            # Monday: also cover Sunday (no email was sent on Sunday).
+            report_dates = [(today - timedelta(days=1)).date(), today.date()]
 
-            parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
-            updated_any = False
-            for r_date in report_dates:
-                r_date_obj = pd.to_datetime(r_date, errors="coerce")
-                if pd.isna(r_date_obj):
-                    continue
-                mask = parsed_master_dates == r_date_obj.date()
-                if mask.any():
-                    master_df.loc[mask, "Yesterday Generation (kWh)"] = selected_yesterday_gen
-                    updated_any = True
+        if "Yesterday Generation (kWh)" not in master_df.columns:
+            master_df["Yesterday Generation (kWh)"] = ""
 
-            # Safety fallback: if report date row was not found, update the latest row shown.
-            if not updated_any and not master_df.empty:
-                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = selected_yesterday_gen
+        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
+        updated_any = False
+        for r_date in report_dates:
+            selected_gen = _compute_yesterday_generation_for_email(sp_service, for_date=r_date)
+            if selected_gen is None:
+                continue
+            mask = parsed_master_dates == r_date
+            if mask.any():
+                master_df.loc[mask, "Yesterday Generation (kWh)"] = selected_gen
+                updated_any = True
+
+        # Safety fallback: if no report-date row was found, update the latest row.
+        if not updated_any and not master_df.empty:
+            fallback_gen = _compute_yesterday_generation_for_email(sp_service)
+            if fallback_gen is not None:
+                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = fallback_gen
 
         # --- 2. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
