@@ -27,7 +27,7 @@ router = APIRouter(tags=["Scheduler Configuration"])
 # Security: Role-Based Access Control (RBAC)
 # ──────────────────────────────────────────────────────────────────────────────
 AUTHORIZED_ADMINS = [
-    "umang.mittal@maqsoftware.com",
+    
     "prajwal.khadse@maqsoftware.com"
 ]
 
@@ -44,6 +44,30 @@ def verify_admin(current_user: dict = Depends(get_current_user)) -> dict:
             detail="Admin access required. You only have permission to view the scheduler."
         )
     return current_user
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GET /api/scheduler/check-admin-status
+# Return whether the current user is an admin (for frontend UI display)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.get("/scheduler/check-admin-status")
+async def check_admin_status(current_user: dict = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Check if the current user is an admin.
+    Returns { "is_admin": true/false, "email": user_email }
+    """
+    user_email = current_user.get("email") or ""
+    is_admin = user_email.lower() in [email.lower() for email in AUTHORIZED_ADMINS]
+    
+    # Debug logging
+    logger.info(f"Admin check for user: '{user_email}' | is_admin: {is_admin}")
+    logger.info(f"Authorized admins: {AUTHORIZED_ADMINS}")
+    logger.info(f"Lowercase check: '{user_email.lower()}' in {[e.lower() for e in AUTHORIZED_ADMINS]}")
+    
+    return {
+        "is_admin": is_admin,
+        "email": user_email
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration Path Setup

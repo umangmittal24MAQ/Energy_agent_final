@@ -6,6 +6,7 @@ import {
   fetchSchedulerStatus,
   fetchSchedulerHistory,
   stopSchedulerApi,
+  checkAdminStatus,
 } from "../lib/api";
 import {
   CalendarClock,
@@ -30,10 +31,6 @@ import { SCHEDULER, DATE_LOCALE } from "../lib/constants";
 
 const RECIPIENTS_FALLBACK_KEY = "scheduler-recipients-fallback";
 const CC_FALLBACK_KEY = "scheduler-cc-fallback";
-const AUTHORIZED_ADMINS = [
-  "umang.mittal@maqsoftware.com",
-  "prajwal.khadse@maqsoftware.com",
-];
 
 function getDefaultTime() {
   return "09:00";
@@ -121,8 +118,8 @@ export default function Scheduler({
   asSettings = false,
 }) {
   const { accounts } = useMsal();
-  const currentUserEmail = accounts?.[0]?.username?.toLowerCase() || "";
-  const isAdmin = AUTHORIZED_ADMINS.includes(currentUserEmail);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminCheckDone, setAdminCheckDone] = useState(false);
 
   const today = useMemo(
     () =>
@@ -315,6 +312,26 @@ export default function Scheduler({
 
     loadScheduler();
   }, [settingsOnly]);
+
+  // Check admin status from backend
+  useEffect(() => {
+    async function fetchAdminStatus() {
+      try {
+        const result = await checkAdminStatus();
+        console.log("Admin status result:", result);
+        console.log("is_admin value:", result.is_admin);
+        console.log("is_admin === true:", result.is_admin === true);
+        setIsAdmin(result.is_admin === true);
+      } catch (err) {
+        console.error("Failed to check admin status:", err);
+        setIsAdmin(false);
+      } finally {
+        setAdminCheckDone(true);
+      }
+    }
+
+    fetchAdminStatus();
+  }, []);
 
   useEffect(() => {
     if (settingsOnly) return undefined;
