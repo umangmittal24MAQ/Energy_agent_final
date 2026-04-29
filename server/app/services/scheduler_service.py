@@ -7,6 +7,8 @@ import sys
 import json
 import logging
 import subprocess
+from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
+
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -465,39 +467,31 @@ def _run_master_data_engine_once(
     solar_date: str,
     fallback_operator_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run one isolated master-data merge cycle."""
-    backend_root = Path(__file__).parent.parent.parent
-    command = [
-        sys.executable,
-        "-m",
-        "app.agents.master_data_engine",
+    """Run one isolated master-data merge cycle in a separate process."""
+    from app.agents.master_data_engine import process_master_data
+
+    logger.info(
+        "Master data engine run: operator_date=%s, solar_date=%s, fallback_operator_date=%s",
         operator_date,
         solar_date,
-    ]
-    if fallback_operator_date:
-        command.append(fallback_operator_date)
-
+        fallback_operator_date,
+    )
     try:
-        logger.info(
-            "Master data engine run: operator_date=%s, solar_date=%s, fallback_operator_date=%s",
-            operator_date,
-            solar_date,
-            fallback_operator_date,
-        )
-        result = subprocess.run(
-            command,
-            cwd=str(backend_root),
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if result.stdout:
-            logger.info(result.stdout.strip())
+        with ProcessPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                process_master_data,
+                operator_date,
+                solar_date,
+                fallback_operator_date,
+            )
+            future.result(timeout=90)
         return {"status": "Success"}
-    except subprocess.CalledProcessError as exc:
-        logger.error(f"Master data engine subprocess failed: {exc.stderr}")
-        return {"status": "Failed", "error": str(exc.stderr)}
-
+    except FuturesTimeoutError:
+        logger.error("Master data engine timed out after 90s")
+        return {"status": "Error", "message": "Engine timeout"}
+    except Exception as exc:
+        logger.error(f"Master data engine failed: {exc}", exc_info=True)
+        return {"status": "Failed", "error": str(exc)}
 
 def _run_master_data_engine() -> Dict[str, Any]:
     """Runs the Master Data merge in isolated subprocesses to prevent memory leaks."""

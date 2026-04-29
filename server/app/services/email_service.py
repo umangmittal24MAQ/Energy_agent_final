@@ -63,13 +63,20 @@ def _parse_email_list_from_env(env_value: str) -> list[str]:
 
 # Load reminder email lists from environment variables
 REMINDER_TO_DISPLAY = _parse_email_list_from_env(
-    os.getenv("OPERATOR_EMAIL", "umang.mittal@maqsoftware.com")
+    os.getenv("OPERATOR_EMAIL", "")
 )
+if not REMINDER_TO_DISPLAY:
+    logging.getLogger("app.services.email_service").warning(
+        "OPERATOR_EMAIL env var is not set. Reminder emails will have no recipients."
+    )
 
 REMINDER_CC_DISPLAY = _parse_email_list_from_env(
-    os.getenv("CC_EMAIL", "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>,Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>,Ishita Singh | MAQ Software <ishitas@maqsoftware.com>,Umang Mittal | MAQ Software <umang.mittal@maqsoftware.com>")
+    os.getenv("CC_EMAIL", "")
 )
-
+if not REMINDER_CC_DISPLAY:
+    logging.getLogger("app.services.email_service").warning(
+        "CC_EMAIL env var is not set. Reminder emails will have no CC recipients."
+    )
 
 def _emails_from_display(items: list[str]) -> list[str]:
     parsed = getaddresses(items)
@@ -94,10 +101,41 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
                 history = []
 
         history.append(entry)
+        MAX_HISTORY = 500
+        history = history[-MAX_HISTORY:]
         with open(SCHEDULER_LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
     except Exception as exc:
         logger.warning(f"Failed to append scheduler history entry: {exc}")
+
+def send_admin_alert(subject: str, error_message: str) -> None:
+    """Send a plain-text fallback alert to the admin when the daily report fails."""
+    try:
+        admin_email = os.getenv("ADMIN_ALERT_EMAIL", "umang.mittal@maqsoftware.com")
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", 587))
+        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
+        sender_password = os.getenv("EMAIL_PASSWORD", "")
+
+        msg = MIMEText(
+            f"Energy Dashboard Alert\n\n"
+            f"Subject: {subject}\n"
+            f"Time: {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}\n\n"
+            f"Error:\n{error_message}",
+            "plain"
+        )
+        msg["From"] = email_from
+        msg["To"] = admin_email
+        msg["Subject"] = f"[ALERT] Energy Dashboard: {subject}"
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_from, sender_password)
+            server.sendmail(email_from, [admin_email], msg.as_string())
+
+        logger.info(f"Admin alert sent to {admin_email}: {subject}")
+    except Exception as alert_exc:
+        logger.error(f"Failed to send admin alert: {alert_exc}")
 
 def _normalize_col_name(name: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(name).lower())
@@ -253,20 +291,24 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         if manual_date:
             report_date_title = manual_date
         elif "Date" in master_df.columns:
-            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed")
+            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
             today_mask = parsed_dates.dt.date == today.date()
             if today_mask.any():
-                report_date_title = str(master_df.loc[today_mask].iloc[-1].get("Date", report_date_title))
+                today_rows_master = master_df.loc[today_mask]
+                if not today_rows_master.empty:
+                    report_date_title = str(today_rows_master.iloc[-1].get("Date", report_date_title))
             elif today.weekday() == 0:
                 sunday_date = (today - timedelta(days=1)).date()
                 sunday_mask = parsed_dates.dt.date == sunday_date
                 if sunday_mask.any():
-                    report_date_title = str(master_df.loc[sunday_mask].iloc[-1].get("Date", report_date_title))
-                else:
+                    sunday_rows = master_df.loc[sunday_mask]
+                    if not sunday_rows.empty:
+                        report_date_title = str(sunday_rows.iloc[-1].get("Date", report_date_title))
+                elif not master_df.empty:
                     report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-            else:
+            elif not master_df.empty:
                 report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-        else:
+        elif not master_df.empty:
             report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
 
         # --- 1.5 OVERRIDE YESTERDAY GENERATION FOR EMAIL CONTENT ---
@@ -415,11 +457,13 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             }
         )
 
+        logger.warning(f"Daily report sent OK to {len(all_recipients)} recipients (attachment: {attachment_name})")
         return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
 
     except Exception as e:
         from app.core.logger import logger
         logger.error(f"Failed to send daily report: {e}")
+        send_admin_alert("Daily report FAILED", str(e))
 
         _append_scheduler_send_history(
             {
@@ -685,5 +729,3 @@ def send_operator_reminder() -> Dict[str, Any]:
             }
         )
         return {"status": "Failed", "error": str(e)}
-
-

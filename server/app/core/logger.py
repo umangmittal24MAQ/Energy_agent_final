@@ -28,18 +28,19 @@ LOGGING_CONFIG = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "level": "INFO",
+            "level": os.getenv("LOG_LEVEL", "INFO"),
             "formatter": "default",
             "stream": "ext://sys.stdout",
         },
         "file": {
             "class": "logging.handlers.RotatingFileHandler",
-            "level": "INFO",
+            "level": os.getenv("LOG_LEVEL", "INFO"),
             "formatter": "detailed",
             "filename": os.getenv("LOG_FILE_PATH", str(LOG_DIR / "app.log")),
             "maxBytes": 10485760,  # 10MB
             "backupCount": 5,
         },
+
         "error_file": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "ERROR",
@@ -48,6 +49,7 @@ LOGGING_CONFIG = {
             "maxBytes": 10485760,  # 10MB
             "backupCount": 5,
         },
+        
     },
     "loggers": {
         "": {

@@ -2,10 +2,10 @@
 FastAPI application setup and middleware configuration
 """
 import os
+import uuid
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-
 from dotenv import load_dotenv
 
 from fastapi import FastAPI
@@ -112,9 +112,13 @@ def create_app() -> FastAPI:
     # Add request/response logging middleware
     @app.middleware("http")
     async def log_requests(request, call_next):
-        logger.info(f"{request.method} {request.url.path}")
+        req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        is_health = request.url.path in ("/health", "/")
+        log = logger.debug if is_health else logger.info
+        log(f"[{req_id}] {request.method} {request.url.path}")
         response = await call_next(request)
-        logger.info(f"Status code: {response.status_code}")
+        log(f"[{req_id}] Status: {response.status_code}")
+        response.headers["X-Request-ID"] = req_id
         return response
     
     @app.get("/")
@@ -124,8 +128,29 @@ def create_app() -> FastAPI:
     # Health check endpoint
     @app.get("/health")
     async def health_check():
-        """Health check endpoint"""
+        """Shallow health check endpoint"""
         return {"status": "healthy", "service": settings.app_name}
+
+    # Deep health check endpoint
+    @app.get("/api/health/deep")
+    async def deep_health():
+        """Deep health check — tests real SharePoint connectivity."""
+        results = {}
+        overall = "ok"
+
+        try:
+            from app.services.sharepoint_data_service import get_service
+            sp = get_service()
+            df = sp.fetch_sheet_data("master_data")
+            results["sharepoint"] = "ok" if df is not None else "error"
+        except Exception as e:
+            results["sharepoint"] = f"error: {str(e)[:120]}"
+
+        if any("error" in str(v) for v in results.values()):
+            overall = "degraded"
+
+        status_code = 200 if overall == "ok" else 503
+        return JSONResponse(status_code=status_code, content={"status": overall, **results})
 
     # Include routers
     try:

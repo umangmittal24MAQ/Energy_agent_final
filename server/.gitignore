@@ -11,8 +11,10 @@
 **/*.pem
 
 # Python
-__pycache__/
-*.py[cod]
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
 *$py.class
 *.so
 .Python
