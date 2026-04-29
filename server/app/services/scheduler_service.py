@@ -15,15 +15,90 @@ import pandas as pd
 
 _daily_report_tracker: Dict[str, bool] = {}
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Persistent Tracker Functions (Survives App Restarts)
+# ──────────────────────────────────────────────────────────────────────────────
+def _load_tracker_from_log() -> Dict[str, bool]:
+    """
+    Load today's tracker state from persistent scheduler_log.json file.
+    This survives app restarts, slot swaps, and worker recycling.
+    Returns a dict like {"2024-04-29": True} if report was already sent today.
+    """
+    if not SCHEDULER_LOG_FILE.exists():
+        return {}
+    
+    try:
+        with open(SCHEDULER_LOG_FILE, 'r', encoding='utf-8') as f:
+            log_data = json.load(f)
+    except Exception as e:
+        logger.error(f"Error reading scheduler log file: {e}")
+        return {}
+    
+    # Extract today's status
+    IST = ZoneInfo("Asia/Kolkata")
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    
+    if today_str in log_data and log_data[today_str].get("status") == "Sent":
+        return {today_str: True}
+    
+    return {}
+
+
+def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> None:
+    """
+    Persist today's report sent flag to scheduler_log.json file.
+    This ensures the flag survives app restarts, slot swaps, and worker recycling.
+    """
+    IST = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(IST)
+    
+    # Load existing log or create new
+    log_data = {}
+    if SCHEDULER_LOG_FILE.exists():
+        try:
+            with open(SCHEDULER_LOG_FILE, 'r', encoding='utf-8') as f:
+                log_data = json.load(f)
+        except Exception as e:
+            logger.error(f"Error reading existing scheduler log: {e}")
+    
+    # Update entry for today
+    log_data[today_str] = {
+        "status": "Sent",
+        "timestamp": now.isoformat(),
+        "trigger_source": trigger_source
+    }
+    
+    # Write back to file
+    try:
+        SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(SCHEDULER_LOG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(log_data, f, indent=4)
+        logger.info(f"✅ Persisted report flag to disk for {today_str}")
+    except Exception as e:
+        logger.error(f"Error saving scheduler log file: {e}")
+
 # 🚀 FIX 1: Added missing tracker check for the Data Refresh Service
 def tracker_is_locked_for_today() -> bool:
     """
-    Allows external services (like data_refresh_service) to check 
-    if the daily report has already been dispatched for today.
+    Check if the daily report has already been dispatched for today.
+    Checks BOTH in-memory tracker AND persistent scheduler_log.json.
+    This survives app restarts.
     """
     IST = ZoneInfo("Asia/Kolkata")
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
-    return _daily_report_tracker.get(today_str, False)
+    
+    # First check in-memory cache (faster)
+    if _daily_report_tracker.get(today_str, False):
+        return True
+    
+    # Then check persistent log file (survives restarts)
+    persistent_tracker = _load_tracker_from_log()
+    if persistent_tracker.get(today_str, False):
+        # Restore to in-memory cache for this session
+        _daily_report_tracker[today_str] = True
+        return True
+    
+    return False
 
 
 # Optional dependency - scheduler is not critical for data endpoints
@@ -468,8 +543,8 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
     should_lock_tracker = trigger_source != "api_manual"
 
-    # 1. Did Ojas upload early? Check the tracker.
-    if should_lock_tracker and _daily_report_tracker.get(today_str, False):
+    # 1. Did Ojas upload early? Check the tracker (both in-memory and persistent).
+    if should_lock_tracker and tracker_is_locked_for_today():
         logger.info("10:30 AM Deadline reached, but the report was already sent early today. Skipping!")
         return {"status": "Skipped", "notes": "Report already sent today"}
 
@@ -482,20 +557,23 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
         if engine_result["status"] == "Success":
             result = send_daily_report(trigger_source=trigger_source, is_missing_data=False)
             if should_lock_tracker:
-                _daily_report_tracker[today_str] = True  # Lock the tracker
+                _daily_report_tracker[today_str] = True
+                _save_tracker_to_log(today_str, trigger_source)  # 🔒 Persist to disk
             return result
         else:
             logger.error("Master Engine failed. Sending fallback report from existing master data.")
             result = send_daily_report(trigger_source="engine_failed_fallback", is_missing_data=False)
             if should_lock_tracker:
-                _daily_report_tracker[today_str] = True  # Lock the tracker
+                _daily_report_tracker[today_str] = True
+                _save_tracker_to_log(today_str, "engine_failed_fallback")  # 🔒 Persist to disk
             return result
     else:
         # Operator forgot to submit data by 10:30 AM. 
         logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
         result = send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
         if should_lock_tracker:
-            _daily_report_tracker[today_str] = True  # Lock the tracker
+            _daily_report_tracker[today_str] = True
+            _save_tracker_to_log(today_str, "empty_fallback")  # 🔒 Persist to disk
         return result
 
 def _run_operator_reminder_cycle():
@@ -508,7 +586,7 @@ def _run_operator_reminder_cycle():
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
 
     # 1. If the report was already sent earlier this morning, stay quiet
-    if _daily_report_tracker.get(today_str, False):
+    if tracker_is_locked_for_today():
         logger.info("Report already sent today. Skipping reminder cycle.")
         return
         
@@ -535,6 +613,7 @@ def _run_operator_reminder_cycle():
             if send_result.get("status") == "Success":
                 # Lock the tracker so subsequent reminders and 10:30 AM are skipped
                 _daily_report_tracker[today_str] = True
+                _save_tracker_to_log(today_str, "early_submission")  # 🔒 Persist to disk
                 logger.info("✅ Early report sent successfully. Tracker locked for the day.")
             else:
                 logger.error(f"Failed to send early report: {send_result.get('error')}")
@@ -628,6 +707,12 @@ def initialize_scheduler_from_config() -> None:
         return
 
     _ensure_scheduler_started()
+    
+    # 🔒 CRITICAL: Load persistent tracker on startup to prevent duplicate reports after restart
+    persistent_tracker = _load_tracker_from_log()
+    _daily_report_tracker.update(persistent_tracker)
+    if persistent_tracker:
+        logger.info(f"✅ Loaded persistent tracker from disk: {persistent_tracker}")
         
     _run_data_refresh()
     
