@@ -11,7 +11,7 @@ router = APIRouter()
 
 AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
 AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID")
-SESSION_SECRET = os.getenv("SESSION_SECRET", "super-secret-key-change-in-prod")
+SESSION_SECRET = os.getenv("SESSION_SECRET")
 SESSION_MAX_AGE = 60 * 60 * 8  # 8 hours
 
 
@@ -99,11 +99,12 @@ async def create_session(body: TokenRequest, response: Response):
     session_token = jwt.encode(session_payload, SESSION_SECRET, algorithm="HS256")
 
     # --- 6. Set the HttpOnly cookie ---
+    is_secure = os.getenv("APP_ENV") == "production"
     response.set_cookie(
         key="session",
         value=session_token,
         httponly=True,          # JS cannot read this — XSS protection
-        secure=False,           # Set to True in production (HTTPS only)
+        secure=is_secure,       # Only HTTPS in production; HTTP in dev
         samesite="lax",         # Protects against CSRF
         max_age=SESSION_MAX_AGE,
         path="/",

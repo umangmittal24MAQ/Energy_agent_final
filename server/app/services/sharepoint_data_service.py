@@ -4,49 +4,75 @@ Fetches and writes data to SharePoint Excel files using Microsoft Graph API
 """
 import logging
 import io
+import os
 from typing import Dict, Optional
 import pandas as pd
+import requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import requests
 
 from .sharepoint_auth import SharePointAuthManager, load_auth_config_from_env
+from app.core.retry import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
 # Timezone for data processing
 IST = ZoneInfo("Asia/Kolkata")
 
-# Clean, unified configuration for our 3 core files
-SHAREPOINT_CONFIG = {
-    "unified_solar": {
-        "name": "UnifiedSolarData",
-        "site_url": "https://testmaq.sharepoint.com/Admin",
-        "drive_id": "b!pp-Tg7hGtEajA8Ko1ZlOH90SzEweDJZOhewh22hLObrahTJ2CauFToyUPFVjjP6F",
-        "folder_path": "22. Facilities Report/MIPL/Noida/2. Electrical data/",
-        "file_name": "UnifiedSolarData.xlsx",
-        "sheet_name": "Sheet1",
-        "date_field": "Date"
-    },
-    "grid_and_diesel": {
-        "name": "grid_and_diesel",
-        "site_url": "https://testmaq.sharepoint.com/Admin",
-        "drive_id": "b!pp-Tg7hGtEajA8Ko1ZlOH90SzEweDJZOhewh22hLObrahTJ2CauFToyUPFVjjP6F",
-        "folder_path": "22. Facilities Report/MIPL/Noida/2. Electrical data/",
-        "file_name": "Electrical Optimization (1).xlsx",
-        "sheet_name": "Sheet1",
-        "date_field": "Date"
-    },
-    "master_data": {
-        "name": "master_data",
-        "site_url": "https://testmaq.sharepoint.com/Admin",
-        "drive_id": "b!pp-Tg7hGtEajA8Ko1ZlOH90SzEweDJZOhewh22hLObrahTJ2CauFToyUPFVjjP6F", 
-        "folder_path": "22. Facilities Report/MIPL/Noida/2. Electrical data/",
-        "file_name": "Master-data.xlsx",
-        "sheet_name": "Sheet1",
-        "date_field": "Date"
+
+def _load_sharepoint_config_from_env() -> Dict:
+    """
+    Load SharePoint configuration from environment variables.
+    
+    Required environment variables (set in Azure App Settings):
+    - SHAREPOINT_UNIFIED_SOLAR_DRIVE_ID
+    - SHAREPOINT_UNIFIED_SOLAR_FOLDER_PATH
+    - SHAREPOINT_UNIFIED_SOLAR_FILE_NAME
+    - SHAREPOINT_GRID_DIESEL_DRIVE_ID
+    - SHAREPOINT_GRID_DIESEL_FOLDER_PATH
+    - SHAREPOINT_GRID_DIESEL_FILE_NAME
+    - SHAREPOINT_MASTER_DATA_DRIVE_ID
+    - SHAREPOINT_MASTER_DATA_FOLDER_PATH
+    - SHAREPOINT_MASTER_DATA_FILE_NAME
+    - SHAREPOINT_SITE_URL (from config.py, or set explicitly)
+    
+    Falls back to empty strings if not set—validation happens at runtime.
+    """
+    site_url = os.getenv("SHAREPOINT_SITE_URL", "").strip()
+    
+    return {
+        "unified_solar": {
+            "name": "UnifiedSolarData",
+            "site_url": site_url,
+            "drive_id": os.getenv("SHAREPOINT_UNIFIED_SOLAR_DRIVE_ID", "").strip(),
+            "folder_path": os.getenv("SHAREPOINT_UNIFIED_SOLAR_FOLDER_PATH", "").strip(),
+            "file_name": os.getenv("SHAREPOINT_UNIFIED_SOLAR_FILE_NAME", "").strip(),
+            "sheet_name": "Sheet1",
+            "date_field": "Date"
+        },
+        "grid_and_diesel": {
+            "name": "grid_and_diesel",
+            "site_url": site_url,
+            "drive_id": os.getenv("SHAREPOINT_GRID_DIESEL_DRIVE_ID", "").strip(),
+            "folder_path": os.getenv("SHAREPOINT_GRID_DIESEL_FOLDER_PATH", "").strip(),
+            "file_name": os.getenv("SHAREPOINT_GRID_DIESEL_FILE_NAME", "").strip(),
+            "sheet_name": "Sheet1",
+            "date_field": "Date"
+        },
+        "master_data": {
+            "name": "master_data",
+            "site_url": site_url,
+            "drive_id": os.getenv("SHAREPOINT_MASTER_DATA_DRIVE_ID", "").strip(),
+            "folder_path": os.getenv("SHAREPOINT_MASTER_DATA_FOLDER_PATH", "").strip(),
+            "file_name": os.getenv("SHAREPOINT_MASTER_DATA_FILE_NAME", "").strip(),
+            "sheet_name": "Sheet1",
+            "date_field": "Date"
+        }
     }
-}
+
+
+# Load configuration from environment variables (NOT hardcoded)
+SHAREPOINT_CONFIG = _load_sharepoint_config_from_env()
 
 
 class SharePointDataService:
@@ -65,6 +91,36 @@ class SharePointDataService:
         
         if not self.authenticated:
             logger.warning("SharePoint authentication failed. Service will not function until credentials are provided.")
+        
+        # Validate SharePoint configuration is complete
+        self._validate_configuration()
+    
+    def _validate_configuration(self) -> None:
+        """Validate that all required SharePoint configuration is set via environment variables."""
+        required_env_vars = [
+            "SHAREPOINT_SITE_URL",
+            "SHAREPOINT_UNIFIED_SOLAR_DRIVE_ID",
+            "SHAREPOINT_UNIFIED_SOLAR_FOLDER_PATH",
+            "SHAREPOINT_UNIFIED_SOLAR_FILE_NAME",
+            "SHAREPOINT_GRID_DIESEL_DRIVE_ID",
+            "SHAREPOINT_GRID_DIESEL_FOLDER_PATH",
+            "SHAREPOINT_GRID_DIESEL_FILE_NAME",
+            "SHAREPOINT_MASTER_DATA_DRIVE_ID",
+            "SHAREPOINT_MASTER_DATA_FOLDER_PATH",
+            "SHAREPOINT_MASTER_DATA_FILE_NAME",
+        ]
+        
+        missing_vars = [var for var in required_env_vars if not os.getenv(var, "").strip()]
+        
+        if missing_vars:
+            logger.warning(
+                f"⚠️  SharePoint configuration incomplete. Missing environment variables: {', '.join(missing_vars)}. "
+                "Set these in Azure App Settings or .env file:\n"
+                "  - SHAREPOINT_SITE_URL\n"
+                "  - SHAREPOINT_UNIFIED_SOLAR_DRIVE_ID, FOLDER_PATH, FILE_NAME\n"
+                "  - SHAREPOINT_GRID_DIESEL_DRIVE_ID, FOLDER_PATH, FILE_NAME\n"
+                "  - SHAREPOINT_MASTER_DATA_DRIVE_ID, FOLDER_PATH, FILE_NAME"
+            )
     
     def get_last_error(self) -> Optional[str]:
         return self.last_error

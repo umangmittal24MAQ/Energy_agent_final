@@ -146,8 +146,8 @@ def _compute_yesterday_generation_for_email(sp_service: Any, for_date: Optional[
         )
         time_col = _find_column(df, ["Time"])
 
-        parsed_date = pd.to_datetime(df[date_col], errors="coerce").dt.date
-        parsed_time = pd.to_datetime(df[time_col], errors="coerce") if time_col else pd.Series(pd.NaT, index=df.index)
+        parsed_date = pd.to_datetime(df[date_col], errors="coerce",format="mixed").dt.date
+        parsed_time = pd.to_datetime(df[time_col], errors="coerce",format="mixed") if time_col else pd.Series(pd.NaT, index=df.index)
 
         if for_date is not None:
             ist_today = pd.to_datetime(for_date).date()
@@ -253,7 +253,7 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         if manual_date:
             report_date_title = manual_date
         elif "Date" in master_df.columns:
-            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed")
             today_mask = parsed_dates.dt.date == today.date()
             if today_mask.any():
                 report_date_title = str(master_df.loc[today_mask].iloc[-1].get("Date", report_date_title))
@@ -291,7 +291,7 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             solar_units_source_col = "Solar Units Consumed(KWh)"
             master_df[solar_units_source_col] = ""
 
-        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
+        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed").dt.date
         updated_any = False
         for r_date in report_dates:
             selected_gen = _compute_yesterday_generation_for_email(sp_service, for_date=r_date)
@@ -338,15 +338,15 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         try:
             attachment_df = master_df
             if "Date" in master_df.columns:
-                target_date = pd.to_datetime(report_date_title, errors="coerce")
-                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+                target_date = pd.to_datetime(report_date_title, errors="coerce",format="mixed")
+                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed")
                 if pd.notna(target_date):
                     day_rows = master_df[parsed_dates.dt.date == target_date.date()]
                     if not day_rows.empty:
                         attachment_df = day_rows
 
             attachment_bytes = _generate_excel_attachment(attachment_df)
-            parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce")
+            parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce",format="mixed")
             attachment_suffix = (
                 parsed_attachment_date.strftime("%Y%m%d")
                 if pd.notna(parsed_attachment_date)
@@ -373,7 +373,7 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         # --- 1. Format the Subject Date to current day (or manual override) ---
         try:
             subject_date_source = manual_date or today.strftime("%Y-%m-%d")
-            subject_date_str = pd.to_datetime(subject_date_source).strftime("%B %d, %Y").replace(" 0", " ")
+            subject_date_str = pd.to_datetime(subject_date_source, format="mixed").strftime("%B %d, %Y").replace(" 0", " ")
         except Exception:
             subject_date_str = today.strftime("%B %d, %Y").replace(" 0", " ")
 
@@ -447,7 +447,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
     # 1. Clean and Sort the Data
     df = df.copy()
     if "Date" in df.columns:
-        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce",format="mixed")
         df = df.dropna(subset=["_parsed_date"])
         df = df.sort_values(by="_parsed_date", ascending=False).head(30)
     else:

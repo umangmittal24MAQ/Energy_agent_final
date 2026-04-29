@@ -64,14 +64,15 @@ def _load_env() -> None:
 
 _load_env()
 
-SURYALOG_LOGIN_ID        = os.getenv("SURYALOG_LOGIN_ID", "MAQ_Software").strip()
-SURYALOG_PASSWORD        = os.getenv("SURYALOG_PASSWORD", "MAQ@1234").strip()
+SURYALOG_LOGIN_ID = os.getenv("SURYALOG_LOGIN_ID")
+if not SURYALOG_LOGIN_ID:
+    raise ValueError("SURYALOG_LOGIN_ID env var is required")
+SURYALOG_LOGIN_ID = SURYALOG_LOGIN_ID.strip()
 
-if not SURYALOG_LOGIN_ID or not SURYALOG_PASSWORD:
-    logging.warning(
-        "⚠️  SURYALOG_LOGIN_ID or SURYALOG_PASSWORD is empty! "
-        "Login will fail. Check your .env file."
-    )
+SURYALOG_PASSWORD = os.getenv("SURYALOG_PASSWORD")
+if not SURYALOG_PASSWORD:
+    raise ValueError("SURYALOG_PASSWORD env var is required")
+SURYALOG_PASSWORD = SURYALOG_PASSWORD.strip()
 SHAREPOINT_TENANT_ID     = os.getenv("SHAREPOINT_TENANT_ID", "").strip()
 SHAREPOINT_CLIENT_ID     = os.getenv("SHAREPOINT_CLIENT_ID", "").strip()
 SHAREPOINT_CLIENT_SECRET = os.getenv("SHAREPOINT_CLIENT_SECRET", "").strip()
