@@ -8,7 +8,6 @@ import json
 import logging
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeoutError
-
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -28,21 +27,20 @@ def _load_tracker_from_log() -> Dict[str, bool]:
     """
     if not SCHEDULER_LOG_FILE.exists():
         return {}
-    
+
     try:
         with open(SCHEDULER_LOG_FILE, 'r', encoding='utf-8') as f:
             log_data = json.load(f)
     except Exception as e:
         logger.error(f"Error reading scheduler log file: {e}")
         return {}
-    
-    # Extract today's status
+
     IST = ZoneInfo("Asia/Kolkata")
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
-    
+
     if today_str in log_data and log_data[today_str].get("status") == "Sent":
         return {today_str: True}
-    
+
     return {}
 
 
@@ -53,8 +51,7 @@ def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> N
     """
     IST = ZoneInfo("Asia/Kolkata")
     now = datetime.now(IST)
-    
-    # Load existing log or create new
+
     log_data = {}
     if SCHEDULER_LOG_FILE.exists():
         try:
@@ -62,15 +59,13 @@ def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> N
                 log_data = json.load(f)
         except Exception as e:
             logger.error(f"Error reading existing scheduler log: {e}")
-    
-    # Update entry for today
+
     log_data[today_str] = {
         "status": "Sent",
         "timestamp": now.isoformat(),
         "trigger_source": trigger_source
     }
-    
-    # Write back to file
+
     try:
         SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(SCHEDULER_LOG_FILE, 'w', encoding='utf-8') as f:
@@ -79,7 +74,7 @@ def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> N
     except Exception as e:
         logger.error(f"Error saving scheduler log file: {e}")
 
-# 🚀 FIX 1: Added missing tracker check for the Data Refresh Service
+
 def tracker_is_locked_for_today() -> bool:
     """
     Check if the daily report has already been dispatched for today.
@@ -88,18 +83,15 @@ def tracker_is_locked_for_today() -> bool:
     """
     IST = ZoneInfo("Asia/Kolkata")
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
-    
-    # First check in-memory cache (faster)
+
     if _daily_report_tracker.get(today_str, False):
         return True
-    
-    # Then check persistent log file (survives restarts)
+
     persistent_tracker = _load_tracker_from_log()
     if persistent_tracker.get(today_str, False):
-        # Restore to in-memory cache for this session
         _daily_report_tracker[today_str] = True
         return True
-    
+
     return False
 
 
@@ -117,13 +109,12 @@ except ImportError:
 
 logger = logging.getLogger("app.services.scheduler_service")
 
+# ──────────────────────────────────────────────────────────────────────────────
 # Configuration & Paths
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
-    # Azure Path: Looks at the persistent storage
     BASE_DIR = Path("/home/site/wwwroot/energy-dashboard")
 else:
-    # Local Path: Looks at the folder outside the 'app' directory
     BASE_DIR = Path(__file__).parent.parent.parent / "energy-dashboard"
 
 BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -146,60 +137,49 @@ else:
 # Distributed Lock Management (Survives Slot Swaps)
 # ──────────────────────────────────────────────────────────────────────────────
 def _get_lock_file_path(job_name: str) -> Path:
-    """Get the lock file path for a specific job."""
     return SCHEDULER_LOCK_DIR / f"{job_name}.lock"
 
 
 def _acquire_distributed_lock(job_name: str, ttl_seconds: int = 300) -> bool:
     """
-    Attempt to acquire a distributed lock using file creation.
-    
-    If two instances try to create the same lock file simultaneously (during slot swap),
-    only one succeeds. The other skips execution.
-    
-    Returns True if lock was acquired, False if it already exists.
+    Attempt to acquire a distributed lock using atomic file creation.
+    Returns True if lock was acquired, False if already held by another instance.
     """
     lock_file = _get_lock_file_path(job_name)
-    
+
     try:
-        # Try to create lock file exclusively (fails if already exists)
-        # This is atomic on most filesystems
         with open(lock_file, 'x') as f:
             f.write(f"Locked at {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}\n")
-        
         logger.info(f"🔒 Acquired distributed lock for job: {job_name}")
         return True
-    
+
     except FileExistsError:
-        # Another instance has the lock
-        lock_age = None
         try:
             if lock_file.exists():
                 lock_age = (datetime.now() - datetime.fromtimestamp(lock_file.stat().st_mtime)).total_seconds()
                 if lock_age > ttl_seconds:
-                    logger.warning(f"⚠️ Stale lock detected for {job_name} (age: {lock_age}s). Removing stale lock.")
+                    logger.warning(f"⚠️ Stale lock detected for {job_name} (age: {lock_age}s). Removing.")
                     lock_file.unlink(missing_ok=True)
-                    return _acquire_distributed_lock(job_name, ttl_seconds)  # Retry
+                    return _acquire_distributed_lock(job_name, ttl_seconds)
                 else:
-                    logger.info(f"⏭️  Skipping job {job_name} (lock held by another instance, age: {lock_age:.1f}s)")
+                    logger.info(f"⏭️ Skipping job {job_name} (lock held by another instance, age: {lock_age:.1f}s)")
         except Exception as e:
             logger.warning(f"Error checking lock age: {e}")
-        
         return False
-    
+
     except Exception as e:
         logger.error(f"Error acquiring distributed lock for {job_name}: {e}")
         return False
 
 
 def _release_distributed_lock(job_name: str) -> None:
-    """Release a distributed lock after job completes."""
     lock_file = _get_lock_file_path(job_name)
     try:
         lock_file.unlink(missing_ok=True)
         logger.info(f"🔓 Released distributed lock for job: {job_name}")
     except Exception as e:
         logger.error(f"Error releasing lock for {job_name}: {e}")
+
 
 def _ensure_scheduler_started() -> None:
     if _scheduler and not _scheduler.running:
@@ -254,7 +234,7 @@ def load_scheduler_config() -> Dict[str, Any]:
             config = json.load(f)
     else:
         config = {
-            "to": "umang.mittal@maqsoftware.com",
+            "to": "",
             "cc": "",
             "subject": "Review Noida Daily Energy Optimization Dashboard",
             "auto_start": True,
@@ -264,6 +244,7 @@ def load_scheduler_config() -> Dict[str, Any]:
     config.setdefault("auto_start", True)
     return _normalize_scheduler_recipients(config)
 
+
 def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Save configuration updates triggered from the frontend."""
     normalized_config = _normalize_scheduler_recipients(config)
@@ -271,6 +252,7 @@ def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
     with open(SCHEDULER_CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(normalized_config, f, indent=4)
     return normalized_config
+
 
 def get_scheduler_status() -> Dict[str, Any]:
     """Returns the live status of the clock to the frontend dashboard."""
@@ -282,12 +264,14 @@ def get_scheduler_status() -> Dict[str, Any]:
         "next_run": job.next_run_time.isoformat() if job and job.next_run_time else None
     }
 
+
 def start_scheduler(send_time: str = DAILY_REPORT_CRON_TIME) -> Dict[str, Any]:
     _schedule_daily_job(send_time)
     cfg = load_scheduler_config()
     cfg["auto_start"] = True
     save_scheduler_config(cfg)
     return {"status": "running"}
+
 
 def stop_scheduler(disable_auto_start: bool = True) -> Dict[str, Any]:
     if _scheduler:
@@ -299,7 +283,6 @@ def stop_scheduler(disable_auto_start: bool = True) -> Dict[str, Any]:
             ] or job.id.startswith("operator_reminder_"):
                 _scheduler.remove_job(job.id)
 
-    # Do not mutate persistent auto_start during process lifecycle shutdowns.
     if disable_auto_start:
         cfg = load_scheduler_config()
         cfg["auto_start"] = False
@@ -326,10 +309,10 @@ def check_grid_diesel_entry_exists() -> bool:
         from .sharepoint_data_service import get_service as get_excel_service
         import pandas as pd
         from zoneinfo import ZoneInfo
-        
+
         sp_excel_service = get_excel_service()
         df = sp_excel_service.fetch_sheet_data("grid_and_diesel")
-        
+
         if df is None or df.empty:
             logger.error("[SCHEDULER DEBUG] Excel file is empty or could not be loaded!")
             return False
@@ -343,30 +326,25 @@ def check_grid_diesel_entry_exists() -> bool:
                     df = df.iloc[i+1:].reset_index(drop=True)
                     logger.info(f"[SCHEDULER DEBUG] Found real headers on row {i+2} and fixed the table!")
                     break
-        # -------------------------
-            
+
         IST = ZoneInfo("Asia/Kolkata")
         today = pd.Timestamp.now(tz=IST).date()
-        
-        # 1. Dynamically find the date column
+
         date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
-        
         if not date_col:
             logger.error(f"[SCHEDULER DEBUG] CRITICAL: No date column found! I only see: {list(df.columns)}")
             return False
-            
+
         logger.info(f"[SCHEDULER DEBUG] Found date column named: '{date_col}'")
-            
-        # 2. Parse dates SAFELY
+
         parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
-        
         if parsed_dates.isna().any():
             fallback_str = df[date_col].astype(str).str.strip()
             ojas_dates = pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce")
             parsed_dates = parsed_dates.fillna(ojas_dates)
             general_dates = pd.to_datetime(fallback_str, errors="coerce", dayfirst=True)
             parsed_dates = parsed_dates.fillna(general_dates)
-            
+
         df["_parsed_date"] = parsed_dates.dt.date
         today_rows = df[df["_parsed_date"] == today]
         if today_rows.empty:
@@ -386,27 +364,18 @@ def check_grid_diesel_entry_exists() -> bool:
             return text not in {"", "nan", "none", "null"}
 
         grid_units_col = next(
-            (
-                c for c in df.columns
-                if "grid" in _normalized(c) and "unit" in _normalized(c)
-            ),
+            (c for c in df.columns if "grid" in _normalized(c) and "unit" in _normalized(c)),
             None,
         )
-
         if not grid_units_col:
             logger.error("[SCHEDULER] Could not locate Grid Units column in Grid and Diesel data.")
             return False
 
         if today_rows[grid_units_col].apply(_has_value).any():
-            # NEW: Also check the Status column for "Done" (case-insensitive)
             status_col = next(
-                (
-                    c for c in df.columns
-                    if "status" in str(c).lower()
-                ),
+                (c for c in df.columns if "status" in str(c).lower()),
                 None,
             )
-            
             if status_col:
                 status_values = today_rows[status_col]
                 if status_values.apply(_status_is_done).any():
@@ -421,26 +390,25 @@ def check_grid_diesel_entry_exists() -> bool:
 
         logger.info("[SCHEDULER] Today's row exists but Grid Units is blank; treating as missing data.")
         return False
-        
+
     except Exception as e:
         from app.core.logger import logger
         logger.error(f"[SCHEDULER DEBUG] Crashed: {e}")
         return False
-    
+
+
 def build_energy_report_html(df: pd.DataFrame) -> str:
     """Builds the HTML table rows (<tr>) specifically for email_service.py."""
     rows_html = ""
-    # Sort by date descending, grab up to 30 days
     if "_parsed_date" not in df.columns and "Date" in df.columns:
         df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce").dt.date
-        
+
     if "_parsed_date" in df.columns:
         df_sorted = df.sort_values("_parsed_date", ascending=False).head(30)
     else:
         df_sorted = df.tail(30)
-    
+
     for _, row in df_sorted.iterrows():
-        # Force Clean HH:MM
         raw_time = row.get("Time", "")
         try:
             clean_time = pd.to_datetime(raw_time).strftime("%H:%M") if raw_time else ""
@@ -467,7 +435,7 @@ def _run_master_data_engine_once(
     solar_date: str,
     fallback_operator_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Run one isolated master-data merge cycle in a separate process."""
+    """Run one isolated master-data merge cycle in a separate process. [REL-06, CODE-05]"""
     from app.agents.master_data_engine import process_master_data
 
     logger.info(
@@ -493,6 +461,7 @@ def _run_master_data_engine_once(
         logger.error(f"Master data engine failed: {exc}", exc_info=True)
         return {"status": "Failed", "error": str(exc)}
 
+
 def _run_master_data_engine() -> Dict[str, Any]:
     """Runs the Master Data merge in isolated subprocesses to prevent memory leaks."""
     IST = ZoneInfo("Asia/Kolkata")
@@ -510,7 +479,6 @@ def _run_master_data_engine() -> Dict[str, Any]:
 
     if now.weekday() == 0:
         sunday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-        # Monday catch-up: write one row for Sunday plus the regular Monday row.
         run_specs = [
             {
                 "operator_date": sunday,
@@ -546,172 +514,154 @@ def _run_master_data_engine() -> Dict[str, Any]:
 
     return {"status": "Success", "runs": len(run_specs)}
 
+
 def _run_solar_scraper() -> None:
     """Runs the SuryaLogix scraper every 30 minutes as a completely isolated subprocess."""
-    
-    # 🔒 Distributed lock for slot swap protection
-    job_name = "suryalogix_scraper"
-    if not _acquire_distributed_lock(job_name, ttl_seconds=600):  # 10 min TTL for long-running job
-        return
-    
     try:
-        import subprocess
-        import sys
-        from pathlib import Path
         from app.core.logger import logger
-        
+
         logger.info("⏳ Starting 30-minute SuryaLogix Scraper job...")
-        
-        # Find the exact path to scrape_to_sharepoint.py
+
         backend_root = Path(__file__).parent.parent.parent
         script_path = backend_root / "scrape_to_sharepoint.py"
-        
-        # 🚀 FIX 2: Removed capture_output so logs stream in real-time
+
         subprocess.run(
             [sys.executable, str(script_path)],
             check=True
         )
-        
         logger.info("✅ Scraper subprocess finished successfully.")
 
     except subprocess.CalledProcessError as exc:
         from app.core.logger import logger
-        # Removed exc.stderr reference because it's no longer captured, it just prints to the main log
-        logger.error(f"❌ Scraper subprocess failed (Exit Code {exc.returncode}). Check main terminal logs for details.")
+        logger.error(f"❌ Scraper subprocess failed (Exit Code {exc.returncode}).")
     except Exception as exc:
         from app.core.logger import logger
         logger.error(f"Scraper completely failed to trigger: {exc}")
-    
-    finally:
-        _release_distributed_lock(job_name)
 
 
 def _run_data_refresh() -> None:
     """Tells caching service to pull fresh stats for the UI Dashboard."""
-    
-    # 🔒 Distributed lock for slot swap protection
-    job_name = "data_refresh"
-    if not _acquire_distributed_lock(job_name, ttl_seconds=300):
-        return
-    
     try:
         from app.services.data_refresh_service import DataRefreshService
         DataRefreshService.refresh_all_data()
     except Exception as e:
         logger.error(f"Error in data refresh task: {e}")
-    
-    finally:
-        _release_distributed_lock(job_name)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Time-Based Jobs
 # ──────────────────────────────────────────────────────────────────────────────
 def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, Any]:
-    """The 10:30 AM Main Entry Point (The Deadline)"""
-    from app.core.logger import logger
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    from app.services.email_service import send_daily_report
-    
-    # 🔒 Distributed lock for slot swap protection (only for scheduler-triggered runs)
-    job_name = "daily_report_automation"
-    if trigger_source == "scheduler":
-        if not _acquire_distributed_lock(job_name, ttl_seconds=600):  # 10 min TTL for master engine
-            return {"status": "Skipped", "notes": "Another instance is running this job (slot swap detected)"}
-    
-    try:
-        IST = ZoneInfo("Asia/Kolkata")
-        today_str = datetime.now(IST).strftime("%Y-%m-%d")
-        should_lock_tracker = trigger_source != "api_manual"
+    """
+    Main Entry Point for sending reports.
 
-        # 1. Did Ojas upload early? Check the tracker (both in-memory and persistent).
-        if should_lock_tracker and tracker_is_locked_for_today():
-            logger.info("10:30 AM Deadline reached, but the report was already sent early today. Skipping!")
+    trigger_source="scheduler"  → standard scheduled run; distributed lock applied;
+                                   tracker checked; fallback report sent if data missing.
+    trigger_source="api_manual" → frontend Send Now button; lock bypassed; tracker bypassed;
+                                   if data present  → full report sent + tracker locked;
+                                   if data missing  → operator reminder sent, tracker NOT locked.
+    """
+    from app.core.logger import logger
+    from app.services.email_service import send_daily_report
+
+    IST = ZoneInfo("Asia/Kolkata")
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+
+    # 🔒 Distributed lock — scheduler only (prevents slot-swap double-fire)
+    job_name = "daily_energy_report"
+    if trigger_source == "scheduler":
+        if not _acquire_distributed_lock(job_name, ttl_seconds=300):
+            return {"status": "Skipped", "notes": "Lock held by another instance"}
+
+    try:
+        # Skip duplicate check for manual triggers so the frontend always gets a response
+        if trigger_source != "api_manual" and tracker_is_locked_for_today():
+            logger.info("Deadline reached, but the report was already sent today. Skipping!")
             return {"status": "Skipped", "notes": "Report already sent today"}
 
         logger.info(f"Triggering daily report automation via {trigger_source}")
-        
+
         if check_grid_diesel_entry_exists():
-            logger.info("Operator data found at 10:30 AM. Running Master Engine before sending report...")
+            logger.info("Operator data found. Running Master Engine before sending report...")
             engine_result = _run_master_data_engine()
-            
+
             if engine_result["status"] == "Success":
                 result = send_daily_report(trigger_source=trigger_source, is_missing_data=False)
-                if should_lock_tracker:
-                    _daily_report_tracker[today_str] = True
-                    _save_tracker_to_log(today_str, trigger_source)  # 🔒 Persist to disk
+                # Lock tracker whenever report is sent successfully (manual or scheduled)
+                _daily_report_tracker[today_str] = True
+                _save_tracker_to_log(today_str, trigger_source)
                 return result
             else:
                 logger.error("Master Engine failed. Sending fallback report from existing master data.")
                 result = send_daily_report(trigger_source="engine_failed_fallback", is_missing_data=False)
-                if should_lock_tracker:
-                    _daily_report_tracker[today_str] = True
-                    _save_tracker_to_log(today_str, "engine_failed_fallback")  # 🔒 Persist to disk
+                _daily_report_tracker[today_str] = True
+                _save_tracker_to_log(today_str, "engine_failed_fallback")
                 return result
         else:
-            # Operator forgot to submit data by 10:30 AM. 
-            logger.warning("Data missing at 10:30 AM! Sending fallback report with yesterday's data.")
+            # ── Manual Send Now: data missing → remind operator, do NOT lock tracker ──
+            if trigger_source == "api_manual":
+                logger.warning("Data missing during manual Send Now. Sending operator reminder instead of fallback report.")
+                from app.services.email_service import send_operator_reminder
+                result = send_operator_reminder()
+                # Intentionally NOT locking the tracker so the scheduler still fires later
+                return result
+
+            # ── Scheduled run: deadline passed, data never arrived → fallback report ──
+            logger.warning("Data missing at deadline! Sending fallback report with yesterday's data.")
             result = send_daily_report(trigger_source="empty_fallback", is_missing_data=True)
-            if should_lock_tracker:
-                _daily_report_tracker[today_str] = True
-                _save_tracker_to_log(today_str, "empty_fallback")  # 🔒 Persist to disk
+            _daily_report_tracker[today_str] = True
+            _save_tracker_to_log(today_str, "empty_fallback")
             return result
-    
+
     finally:
         if trigger_source == "scheduler":
             _release_distributed_lock(job_name)
 
-def _run_operator_reminder_cycle():
+
+def _run_operator_reminder_cycle() -> None:
     """Triggered at 9:00, 9:30, 10:00 to verify data or send early report."""
-    
+    from app.core.logger import logger
+
     # 🔒 Distributed lock for slot swap protection
     job_name = "operator_reminder_cycle"
     if not _acquire_distributed_lock(job_name, ttl_seconds=300):
         return
-    
+
     try:
-        from app.core.logger import logger
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        
         IST = ZoneInfo("Asia/Kolkata")
         today_str = datetime.now(IST).strftime("%Y-%m-%d")
 
-        # 1. If the report was already sent earlier this morning, stay quiet
+        # If the report was already sent earlier this morning, stay quiet
         if tracker_is_locked_for_today():
             logger.info("Report already sent today. Skipping reminder cycle.")
             return
-            
-        # 2. Check if the data is there
+
         if not check_grid_diesel_entry_exists():
             logger.info("Grid data missing! Attempting to send reminder...")
             from app.services.email_service import send_operator_reminder
-            
+
             result = send_operator_reminder()
             if result.get("status") == "Success":
                 logger.info(f"Reminder Email sent successfully: {result.get('notes')}")
             else:
                 logger.error(f"Reminder Email FAILED: {result.get('error') or result.get('notes')}")
-                
         else:
-            # 3. THE UPGRADE: Data is here early! Bypass 10:30 AM and send NOW.
+            # Data is here early — bypass 10:30 AM and send NOW
             logger.info("Grid data is PRESENT early! Bypassing 10:30 AM deadline and sending Report NOW.")
-            
+
             engine_result = _run_master_data_engine()
             if engine_result["status"] == "Success":
                 from app.services.email_service import send_daily_report
                 send_result = send_daily_report(trigger_source="early_submission", is_missing_data=False)
-                
+
                 if send_result.get("status") == "Success":
-                    # Lock the tracker so subsequent reminders and 10:30 AM are skipped
                     _daily_report_tracker[today_str] = True
-                    _save_tracker_to_log(today_str, "early_submission")  # 🔒 Persist to disk
+                    _save_tracker_to_log(today_str, "early_submission")
                     logger.info("✅ Early report sent successfully. Tracker locked for the day.")
                 else:
                     logger.error(f"Failed to send early report: {send_result.get('error')}")
             else:
                 logger.error("Master Engine Failed during early submission.")
-    
+
     finally:
         _release_distributed_lock(job_name)
 
@@ -720,29 +670,24 @@ def _run_operator_reminder_cycle():
 # ──────────────────────────────────────────────────────────────────────────────
 def _schedule_daily_job(send_time: str) -> None:
     _ensure_scheduler_started()
-    
-    from datetime import datetime, timedelta
-    
-    # 1. Parse the starting time safely
+
     try:
         base_time = datetime.strptime(send_time, "%H:%M")
     except ValueError:
-        # Fallback if frontend sends weird data
         base_time = datetime.strptime("09:00", "%H:%M")
 
-    # 2. Calculate the dynamic +30 minute intervals
-    cycle_1 = base_time                                # +0 mins
-    cycle_2 = base_time + timedelta(minutes=30)        # +30 mins
-    cycle_3 = base_time + timedelta(minutes=60)        # +60 mins
-    final_cycle = base_time + timedelta(minutes=90)    # +90 mins (Final Report)
+    cycle_1    = base_time
+    cycle_2    = base_time + timedelta(minutes=30)
+    cycle_3    = base_time + timedelta(minutes=60)
+    final_cycle = base_time + timedelta(minutes=90)
 
-    # 3. Main Daily Report (Runs Monday through Saturday on the 4th cycle)
+    # Main Daily Report
     _scheduler.add_job(
         run_daily_report_automation,
         trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=final_cycle.hour, 
-            minute=final_cycle.minute, 
+            day_of_week='mon-sat',
+            hour=final_cycle.hour,
+            minute=final_cycle.minute,
             timezone=ZoneInfo("Asia/Kolkata")
         ),
         id=SCHEDULER_JOB_ID,
@@ -751,13 +696,13 @@ def _schedule_daily_job(send_time: str) -> None:
         coalesce=True
     )
 
-    # 4. Early Warning 1 (Runs on Cycle 1)
+    # Early Warning Cycle 1
     _scheduler.add_job(
         _run_operator_reminder_cycle,
         trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_1.hour, 
-            minute=cycle_1.minute, 
+            day_of_week='mon-sat',
+            hour=cycle_1.hour,
+            minute=cycle_1.minute,
             timezone=ZoneInfo("Asia/Kolkata")
         ),
         id="operator_reminder_cycle_1",
@@ -765,14 +710,14 @@ def _schedule_daily_job(send_time: str) -> None:
         max_instances=1,
         coalesce=True
     )
-    
-    # 5. Early Warning 2 (Runs on Cycle 2)
+
+    # Early Warning Cycle 2
     _scheduler.add_job(
         _run_operator_reminder_cycle,
         trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_2.hour, 
-            minute=cycle_2.minute, 
+            day_of_week='mon-sat',
+            hour=cycle_2.hour,
+            minute=cycle_2.minute,
             timezone=ZoneInfo("Asia/Kolkata")
         ),
         id="operator_reminder_cycle_2",
@@ -781,13 +726,13 @@ def _schedule_daily_job(send_time: str) -> None:
         coalesce=True
     )
 
-    # 6. Final Warning for Operator (Runs on Cycle 3)
+    # Final Warning Cycle 3
     _scheduler.add_job(
         _run_operator_reminder_cycle,
         trigger=CronTrigger(
-            day_of_week='mon-sat', 
-            hour=cycle_3.hour, 
-            minute=cycle_3.minute, 
+            day_of_week='mon-sat',
+            hour=cycle_3.hour,
+            minute=cycle_3.minute,
             timezone=ZoneInfo("Asia/Kolkata")
         ),
         id="operator_reminder_cycle_3",
@@ -796,32 +741,33 @@ def _schedule_daily_job(send_time: str) -> None:
         coalesce=True
     )
 
+
 def initialize_scheduler_from_config() -> None:
     """Boot sequence triggered by main.py."""
     if not HAS_SCHEDULER:
         return
 
     _ensure_scheduler_started()
-    
-    # 🔒 CRITICAL: Load persistent tracker on startup to prevent duplicate reports after restart
+
+    # Load persistent tracker on startup to prevent duplicate reports after restart
     persistent_tracker = _load_tracker_from_log()
     _daily_report_tracker.update(persistent_tracker)
     if persistent_tracker:
         logger.info(f"✅ Loaded persistent tracker from disk: {persistent_tracker}")
-        
+
     _run_data_refresh()
-    
-    # 1. Start Scraper Clock (Runs every 30 mins between 06:00 and 19:30)
+
+    # Scraper Clock (every 30 mins between 06:00 and 19:30)
     _scheduler.add_job(
         _run_solar_scraper,
         trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="suryalogix_scraper_job",
         replace_existing=True,
         max_instances=1,
-        coalesce=True    
+        coalesce=True
     )
-    
-    # 2. Start Data Refresh Clock (Updates API Cache every 30 mins between 06:00 and 19:30)
+
+    # Data Refresh Clock (every 30 mins between 06:00 and 19:30)
     _scheduler.add_job(
         _run_data_refresh,
         trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
@@ -831,7 +777,7 @@ def initialize_scheduler_from_config() -> None:
         coalesce=True
     )
 
-    # 3. Start Daily Email Clocks
+    # Daily Email Clocks
     cfg = load_scheduler_config()
     if cfg.get("auto_start", False):
         _schedule_daily_job(
