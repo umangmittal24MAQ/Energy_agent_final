@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 _daily_report_tracker: Dict[str, bool] = {}
+_late_engine_ran_today: Dict[str, bool] = {}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Persistent Tracker Functions (Survives App Restarts)
@@ -551,7 +552,38 @@ def _run_data_refresh() -> None:
         DataRefreshService.refresh_all_data()
     except Exception as e:
         logger.error(f"Error in data refresh task: {e}")
+def _run_late_data_check() -> None:
+    """
+    Runs after the final reminder cycle (10:00 AM onwards).
+    If operator submits data late, silently runs master engine so
+    next day's report has merged data. No email is sent.
+    """
+    from app.core.logger import logger
 
+    IST = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(IST)
+    today_str = now.strftime("%Y-%m-%d")
+
+    # Only relevant if tracker is already locked (report already sent today)
+    if not tracker_is_locked_for_today():
+        return
+
+    # Only run master engine once per day for late data
+    if _late_engine_ran_today.get(today_str):
+        return
+
+    # Check if operator data arrived late
+    if not check_grid_diesel_entry_exists():
+        return
+
+    logger.info("Late operator data detected after deadline. Running master engine silently...")
+    engine_result = _run_master_data_engine()
+
+    if engine_result["status"] == "Success":
+        _late_engine_ran_today[today_str] = True
+        logger.info("✅ Late master engine run complete. Tomorrow's report will use updated data.")
+    else:
+        logger.error(f"Late master engine run failed: {engine_result.get('error')}")
 # ──────────────────────────────────────────────────────────────────────────────
 # Time-Based Jobs
 # ──────────────────────────────────────────────────────────────────────────────
@@ -767,6 +799,17 @@ def initialize_scheduler_from_config() -> None:
         _run_solar_scraper,
         trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="suryalogix_scraper_job",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True
+    )
+
+    # Late Data Check (every 30 mins between 10:30 and 19:30)
+    # Silently runs master engine if operator submits data after the deadline
+    _scheduler.add_job(
+        _run_late_data_check,
+        trigger=CronTrigger(hour='10-19', minute='30', timezone=ZoneInfo("Asia/Kolkata")),
+        id="late_data_check",
         replace_existing=True,
         max_instances=1,
         coalesce=True
