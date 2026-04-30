@@ -30,7 +30,8 @@ def _load_tracker_from_log() -> Dict[str, bool]:
 
     try:
         with open(SCHEDULER_LOG_FILE, 'r', encoding='utf-8') as f:
-            log_data = json.load(f)
+            raw = json.load(f)
+            log_data = raw if isinstance(raw, dict) else {}
     except Exception as e:
         logger.error(f"Error reading scheduler log file: {e}")
         return {}
@@ -56,7 +57,12 @@ def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> N
     if SCHEDULER_LOG_FILE.exists():
         try:
             with open(SCHEDULER_LOG_FILE, 'r', encoding='utf-8') as f:
-                log_data = json.load(f)
+                raw = json.load(f)
+                # Handle legacy list format written by _append_scheduler_send_history()
+                if isinstance(raw, dict):
+                    log_data = raw
+                else:
+                    log_data = {}  # discard old list format, start fresh dict
         except Exception as e:
             logger.error(f"Error reading existing scheduler log: {e}")
 
@@ -65,7 +71,6 @@ def _save_tracker_to_log(today_str: str, trigger_source: str = "scheduler") -> N
         "timestamp": now.isoformat(),
         "trigger_source": trigger_source
     }
-
     try:
         SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(SCHEDULER_LOG_FILE, 'w', encoding='utf-8') as f:

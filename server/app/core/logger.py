@@ -10,6 +10,13 @@ from typing import Optional
 # Create logs directory if it doesn't exist
 LOG_DIR = Path(__file__).parent.parent.parent.parent / "logs"
 LOG_DIR.mkdir(exist_ok=True)
+try:
+    log_file = Path(os.getenv("LOG_FILE_PATH", str(LOG_DIR / "app.log")))
+    error_file = Path(os.getenv("LOG_ERROR_PATH", str(LOG_DIR / "errors.log")))
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    error_file.parent.mkdir(parents=True, exist_ok=True)
+except Exception:
+    pass  # If path creation fails, fall back silently
 
 # Logging configuration dictionary
 LOGGING_CONFIG = {
@@ -45,7 +52,7 @@ LOGGING_CONFIG = {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "ERROR",
             "formatter": "detailed",
-            "filename": os.getenv("LOG_FILE_PATH", str(LOG_DIR / "errors.log")),
+            "filename": str(Path(os.getenv("LOG_ERROR_PATH", str(LOG_DIR / "errors.log")))),
             "maxBytes": 10485760,  # 10MB
             "backupCount": 5,
         },
