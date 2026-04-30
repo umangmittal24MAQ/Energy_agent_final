@@ -25,6 +25,8 @@ email-validator==2.3.0
 pydantic[email]
 httpx==0.28.1
 PyJWT[crypto]==2.7.0
+slowapi==0.1.9
+redis==5.2.0
 # Key transitive dependencies pinned for stability
 annotated-types==0.7.0
 anyio==4.13.0

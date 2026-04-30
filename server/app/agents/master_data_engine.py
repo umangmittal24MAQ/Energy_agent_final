@@ -44,11 +44,16 @@ CLIENT_ID = os.getenv("SHAREPOINT_CLIENT_ID", "").strip()
 CLIENT_SECRET = os.getenv("SHAREPOINT_CLIENT_SECRET", "").strip()
 GRID_RATE = float(os.getenv("GRID_RATE_INR_PER_KWH", "7.11"))
 
-HOSTNAME = "testmaq.sharepoint.com"
-SITE_PATH = "/Admin"
-DRIVE_NAME = "Private"
-BASE_FOLDER = "22. Facilities Report/MIPL/Noida/2. Electrical data/"
-GRAPH_BASE = "https://graph.microsoft.com/v1.0"
+HOSTNAME    = os.getenv("SHAREPOINT_HOSTNAME", "").strip()
+SITE_PATH   = os.getenv("SHAREPOINT_SITE_PATH", "/Admin").strip()
+DRIVE_NAME  = os.getenv("SHAREPOINT_DRIVE_NAME", "").strip()
+BASE_FOLDER = os.getenv("SHAREPOINT_BASE_FOLDER", "").strip()
+
+if not all([HOSTNAME, DRIVE_NAME, BASE_FOLDER]):
+    raise RuntimeError(
+        "master_data_engine: SHAREPOINT_HOSTNAME, SHAREPOINT_DRIVE_NAME, "
+        "and SHAREPOINT_BASE_FOLDER must be set in environment."
+    )
 
 _access_token: Optional[str] = None
 _site_id: Optional[str] = None
@@ -57,9 +62,14 @@ _drive_id: Optional[str] = None
 # ──────────────────────────────────────────────────────────────────────────────
 # SharePoint Graph API Helpers
 # ──────────────────────────────────────────────────────────────────────────────
+import time
+_access_token: Optional[str] = None
+_token_expiry: float = 0.0
+
 def _get_token() -> str:
-    global _access_token
-    if _access_token: return _access_token
+    global _access_token, _token_expiry
+    if _access_token and time.time() < _token_expiry - 60:
+        return _access_token
     url = f"https://login.microsoftonline.com/{TENANT_ID}/oauth2/v2.0/token"
     resp = requests.post(url, data={
         "grant_type": "client_credentials",
@@ -68,19 +78,30 @@ def _get_token() -> str:
         "scope": "https://graph.microsoft.com/.default",
     }, timeout=30)
     resp.raise_for_status()
-    _access_token = resp.json()["access_token"]
+    data = resp.json()
+    _access_token = data["access_token"]
+    _token_expiry = time.time() + data.get("expires_in", 3600)
     return _access_token
 
 def _get_site_and_drive_ids() -> tuple[str, str]:
     global _site_id, _drive_id
-    if _site_id and _drive_id: return _site_id, _drive_id
+    if _site_id and _drive_id:
+        return _site_id, _drive_id
     headers = {"Authorization": f"Bearer {_get_token()}"}
-    _site_id = requests.get(f"{GRAPH_BASE}/sites/{HOSTNAME}:{SITE_PATH}", headers=headers).json()["id"]
-    for drive in requests.get(f"{GRAPH_BASE}/sites/{_site_id}/drives", headers=headers).json().get("value", []):
+
+    site_resp = requests.get(f"{GRAPH_BASE}/sites/{HOSTNAME}:{SITE_PATH}", headers=headers, timeout=30)
+    site_resp.raise_for_status()
+    _site_id = site_resp.json()["id"]
+
+    drives_resp = requests.get(f"{GRAPH_BASE}/sites/{_site_id}/drives", headers=headers, timeout=30)
+    drives_resp.raise_for_status()
+    for drive in drives_resp.json().get("value", []):
         if drive["name"] == DRIVE_NAME:
             _drive_id = drive["id"]
-            return _site_id, _drive_id
-    raise Exception("Drive not found")
+            break
+    if not _drive_id:
+        raise RuntimeError(f"Drive '{DRIVE_NAME}' not found in site '{_site_id}'")
+    return _site_id, _drive_id
 
 def upload_excel(filename: str, df: pd.DataFrame) -> None:
     site_id, drive_id = _get_site_and_drive_ids()

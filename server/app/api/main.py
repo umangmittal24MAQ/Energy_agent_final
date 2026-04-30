@@ -12,9 +12,11 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import get_settings
 from app.core.logger import setup_logging, get_logger
+from app.core.rate_limit import limiter
 from app.services.scheduler_service import initialize_scheduler_from_config, stop_scheduler
 
 logger = get_logger(__name__)
@@ -93,7 +95,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # 🚨 CRITICAL FOR AUTH: allow_credentials MUST be True, and
+    # ──────────────────────────────────────────────────────────────────────────
+    # Rate Limiting Setup (FIX RL-01: Protect auth endpoints from DoS)
+    # ──────────────────────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, limiter.error_handler)
+
+    #  CRITICAL FOR AUTH: allow_credentials MUST be True, and
     # allowed_origins_list MUST NOT be ["*"]
     app.add_middleware(
         CORSMiddleware,
@@ -190,3 +198,4 @@ def get_app() -> FastAPI:
 
 
 app = create_app()
+

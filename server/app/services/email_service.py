@@ -60,20 +60,25 @@ def _parse_email_list_from_env(env_value: str) -> list[str]:
     # Split by comma and strip whitespace, filter empty strings
     return [email.strip() for email in env_value.split(',') if email.strip()]
 
+def _get_reminder_to() -> list[str]:
+    return _parse_email_list_from_env(os.getenv("OPERATOR_EMAIL", ""))
+
+def _get_reminder_cc() -> list[str]:
+    return _parse_email_list_from_env(os.getenv("CC_EMAIL", ""))
 
 # Load reminder email lists from environment variables
-REMINDER_TO_DISPLAY = _parse_email_list_from_env(
+_get_reminder_to() = _parse_email_list_from_env(
     os.getenv("OPERATOR_EMAIL", "")
 )
-if not REMINDER_TO_DISPLAY:
+if not _get_reminder_to():
     logging.getLogger("app.services.email_service").warning(
         "OPERATOR_EMAIL env var is not set. Reminder emails will have no recipients."
     )
 
-REMINDER_CC_DISPLAY = _parse_email_list_from_env(
+_get_reminder_cc() = _parse_email_list_from_env(
     os.getenv("CC_EMAIL", "")
 )
-if not REMINDER_CC_DISPLAY:
+if not _get_reminder_cc():
     logging.getLogger("app.services.email_service").warning(
         "CC_EMAIL env var is not set. Reminder emails will have no CC recipients."
     )
@@ -686,8 +691,8 @@ def send_operator_reminder() -> Dict[str, Any]:
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
 
-        to_list = _emails_from_display(REMINDER_TO_DISPLAY)
-        cc_list = _emails_from_display(REMINDER_CC_DISPLAY)
+        to_list = _emails_from_display(_get_reminder_to())
+        cc_list = _emails_from_display(_get_reminder_cc())
 
         all_recipients = to_list + cc_list
         if not all_recipients:
@@ -716,9 +721,9 @@ def send_operator_reminder() -> Dict[str, Any]:
         msg = MIMEMultipart("alternative")
         msg["From"] = email_from
 
-        msg["To"] = ", ".join(REMINDER_TO_DISPLAY)
+        msg["To"] = ", ".join(_get_reminder_to())
         if cc_list:
-            msg["Cc"] = ", ".join(REMINDER_CC_DISPLAY)
+            msg["Cc"] = ", ".join(_get_reminder_cc())
 
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
@@ -750,7 +755,7 @@ def send_operator_reminder() -> Dict[str, Any]:
                 "kind": "operator_reminder",
                 "trigger_source": "operator_reminder_cycle",
                 "subject": "Action Required: Operator Data Missing",
-                "recipients": ", ".join(_emails_from_display(REMINDER_TO_DISPLAY + REMINDER_CC_DISPLAY)),
+                "recipients": ", ".join(_emails_from_display(_get_reminder_to() + _get_reminder_cc())),
                 "attachment": None,
                 "notes": str(e),
             }

@@ -8,6 +8,8 @@ import httpx
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
+from app.core.rate_limit import limiter
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -37,27 +39,44 @@ def _get_azure_tenant_id() -> Optional[str]:
 # and a single point of failure. Microsoft's signing keys rotate infrequently
 # (days/weeks), so caching for 1 hour is safe and dramatically more resilient.
 # ─────────────────────────────────────────────────────────────────────────────
-_jwks_cache: Dict[str, Any] = {}   # key: tenant_id → {"keys": [...], "fetched_at": float}
+import asyncio
+
+_jwks_cache: Dict[str, Any] = {}
+_jwks_locks: Dict[str, asyncio.Lock] = {}
 _JWKS_TTL_SECONDS = 3600           # 1 hour
 
+import asyncio
+
+_jwks_cache: Dict[str, Any] = {}
+_jwks_locks: Dict[str, asyncio.Lock] = {}
+
 async def _get_jwks(tenant_id: str) -> Dict:
+    # Fast path — no lock needed for read if already populated
     cached = _jwks_cache.get(tenant_id)
     if cached and (time.time() - cached["fetched_at"]) < _JWKS_TTL_SECONDS:
         return cached["data"]
 
-    jwks_uri = f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(jwks_uri)
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as e:
-        logger.error(f"Failed to fetch JWKS for tenant {tenant_id}: {e}")
-        raise HTTPException(status_code=502, detail="Could not reach Microsoft to verify token.")
+    if tenant_id not in _jwks_locks:
+        _jwks_locks[tenant_id] = asyncio.Lock()
 
-    _jwks_cache[tenant_id] = {"data": data, "fetched_at": time.time()}
-    return data
+    async with _jwks_locks[tenant_id]:
+        # Re-check inside lock (another coroutine may have populated it)
+        cached = _jwks_cache.get(tenant_id)
+        if cached and (time.time() - cached["fetched_at"]) < _JWKS_TTL_SECONDS:
+            return cached["data"]
 
+        jwks_uri = f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(jwks_uri)
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as e:
+            logger.error(f"Failed to fetch JWKS for tenant {tenant_id}: {e}")
+            raise HTTPException(status_code=502, detail="Could not reach Microsoft to verify token.")
+
+        _jwks_cache[tenant_id] = {"data": data, "fetched_at": time.time()}
+        return data
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Request schema
@@ -73,10 +92,14 @@ class TokenRequest(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/session")
-async def create_session(body: TokenRequest, response: Response):
+@limiter.limit("10/minute")
+async def create_session(request: Request, body: TokenRequest, response: Response):
     """
     Exchange a valid Azure AD id_token for a server-side HttpOnly session cookie.
     The frontend (AuthGate) calls this once after MSAL login succeeds.
+    
+    Rate limited to 10 requests per minute to prevent brute force attacks and
+    JWKS verification DoS attacks.
     """
     id_token = body.id_token
     session_secret = _get_session_secret()
@@ -177,8 +200,13 @@ async def create_session(body: TokenRequest, response: Response):
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.delete("/logout")
-async def logout(response: Response):
-    """Clear the server-side session cookie."""
+@limiter.limit("30/minute")
+async def logout(request: Request, response: Response):
+    """Clear the server-side session cookie.
+    
+    Rate limited to 30 requests per minute to prevent logout spam
+    while still allowing legitimate users to logout multiple times.
+    """
     response.delete_cookie(key="session", path="/")
     return {"message": "Logged out successfully."}
 

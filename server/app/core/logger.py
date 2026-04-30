@@ -105,5 +105,3 @@ def get_logger(name: str) -> logging.Logger:
 
 
 # Initialize logging and export default logger
-logging.config.dictConfig(LOGGING_CONFIG)
-logger = logging.getLogger("app")

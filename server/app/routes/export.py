@@ -29,5 +29,5 @@ async def export_energy_data(request: ExportRequest):
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

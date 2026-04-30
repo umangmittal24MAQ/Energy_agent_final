@@ -24,13 +24,10 @@ router = APIRouter(tags=["Scheduler Configuration"])
 # ──────────────────────────────────────────────────────────────────────────────
 # Security: Role-Based Access Control (RBAC)
 # ──────────────────────────────────────────────────────────────────────────────
-AUTHORIZED_ADMINS = [
-    "umang.mittal@maqsoftware.com",
-    "prajwal.khadse@maqsoftware.com",
-    "krishnav@maqsoftware.com",
-    "ishitas@maqsoftware.com"
-]
-
+def _get_authorized_admins() -> list[str]:
+    """Read admin list from environment at request time, never at import time."""
+    raw = os.getenv("AUTHORIZED_ADMINS", "")
+    return [e.strip().lower() for e in raw.split(",") if e.strip()]
 # ─────────────────────────────────────────────────────────────────────────────
 # FIX C3: verify_admin was reading current_user.get("preferred_username") first,
 # but get_current_user() returns {"email": ..., "name": ...} — "preferred_username"
@@ -44,17 +41,10 @@ def _extract_email(user: dict) -> str:
 
 
 def verify_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    """
-    Dependency that blocks non-admins from mutating scheduler/email config.
-    """
     user_email = _extract_email(current_user)
-
-    if user_email.lower() not in [e.lower() for e in AUTHORIZED_ADMINS]:
-        logger.warning(f"Unauthorized configuration edit attempt by: {user_email!r}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required. You only have permission to view the scheduler.",
-        )
+    if user_email.lower() not in _get_authorized_admins():
+        logger.warning(f"Unauthorized attempt by: {user_email!r}")
+        raise HTTPException(status_code=403, detail="Admin access required.")
     return current_user
 
 # ──────────────────────────────────────────────────────────────────────────────

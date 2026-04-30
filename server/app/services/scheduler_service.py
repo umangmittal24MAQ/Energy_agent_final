@@ -312,12 +312,25 @@ def load_scheduler_config() -> Dict[str, Any]:
     return _normalize_scheduler_recipients(config)
 
 
+import tempfile, shutil
+
 def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Save configuration updates triggered from the frontend."""
     normalized_config = _normalize_scheduler_recipients(config)
     SCHEDULER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(SCHEDULER_CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(normalized_config, f, indent=4)
+    # Write to a temp file in the same directory, then atomically rename
+    fd, tmp_path = tempfile.mkstemp(
+        dir=SCHEDULER_CONFIG_FILE.parent, suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(normalized_config, f, indent=4)
+        shutil.move(tmp_path, SCHEDULER_CONFIG_FILE)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
     return normalized_config
 
 
@@ -372,7 +385,6 @@ def _status_is_done(value: Any) -> bool:
 
 def check_grid_diesel_entry_exists() -> bool:
     """Check if data exists for TODAY in the grid_and_diesel Excel file AND Status='Done'."""
-    from app.core.logger import logger
     try:
         from .sharepoint_data_service import get_service as get_excel_service
 
