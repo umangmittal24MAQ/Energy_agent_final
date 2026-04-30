@@ -84,22 +84,31 @@ def _emails_from_display(items: list[str]) -> list[str]:
 
 
 def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
-    """Append one send-history record to scheduler_log.json without affecting mail flow."""
+    """
+    Append one send-history record to scheduler_log.json (JSON list format).
+    This file is exclusively owned by email_service and always stays a list.
+ 
+    FIX C4: scheduler_service now writes its tracker dict to a SEPARATE file
+    (scheduler_tracker.json), so there is no longer a format collision between
+    the two services writing to the same file.
+    """
     try:
         from app.services.scheduler_service import SCHEDULER_LOG_FILE
-
+ 
         SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         history: list[Dict[str, Any]] = []
-
+ 
         if SCHEDULER_LOG_FILE.exists():
             try:
                 with open(SCHEDULER_LOG_FILE, "r", encoding="utf-8") as f:
                     payload = json.load(f)
                 if isinstance(payload, list):
                     history = payload
+                # If it's a dict (leftover from old code), discard it and start fresh.
+                # After this fix, that can only happen during one-time migration.
             except Exception:
                 history = []
-
+ 
         history.append(entry)
         MAX_HISTORY = 500
         history = history[-MAX_HISTORY:]
@@ -107,36 +116,54 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
             json.dump(history, f, indent=2)
     except Exception as exc:
         logger.warning(f"Failed to append scheduler history entry: {exc}")
+ 
 
 def send_admin_alert(subject: str, error_message: str) -> None:
-    """Send a plain-text fallback alert to the admin when the daily report fails."""
+    """
+    Send a plain-text fallback alert to the admin when the daily report fails.
+ 
+    FIX S4: No longer has a hardcoded personal email as a fallback default.
+    Set ADMIN_ALERT_EMAIL in your environment / Azure App Settings.
+    If not set, the alert is skipped and a warning is logged.
+    """
+    admin_email = os.getenv("ADMIN_ALERT_EMAIL")
+    if not admin_email:
+        logger.warning(
+            "send_admin_alert: ADMIN_ALERT_EMAIL env var is not set. "
+            f"Skipping admin alert for: {subject}"
+        )
+        return
+ 
     try:
-        admin_email = os.getenv("ADMIN_ALERT_EMAIL", "umang.mittal@maqsoftware.com")
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         smtp_port = int(os.getenv("SMTP_PORT", 587))
-        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
+        email_from = os.getenv("EMAIL_FROM", "")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
-
+ 
+        if not email_from or not sender_password:
+            logger.error("send_admin_alert: EMAIL_FROM or EMAIL_PASSWORD not set. Cannot send alert.")
+            return
+ 
         msg = MIMEText(
             f"Energy Dashboard Alert\n\n"
             f"Subject: {subject}\n"
             f"Time: {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}\n\n"
             f"Error:\n{error_message}",
-            "plain"
+            "plain",
         )
         msg["From"] = email_from
         msg["To"] = admin_email
         msg["Subject"] = f"[ALERT] Energy Dashboard: {subject}"
-
+ 
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(email_from, sender_password)
             server.sendmail(email_from, [admin_email], msg.as_string())
-
+ 
         logger.info(f"Admin alert sent to {admin_email}: {subject}")
     except Exception as alert_exc:
         logger.error(f"Failed to send admin alert: {alert_exc}")
-
+ 
 def _normalize_col_name(name: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(name).lower())
 

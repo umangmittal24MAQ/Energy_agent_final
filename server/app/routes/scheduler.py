@@ -2,14 +2,12 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-# 🚀 ADDED: Depends and status for security injection
 from fastapi import APIRouter, HTTPException, Body, Depends, status
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
 
 from app.core.logger import logger
-# 🚀 ADDED: Import your Microsoft auth dependency to identify the user
-from app.routes.auth import get_current_user 
+from app.routes.auth import get_current_user
 
 from app.services.scheduler_service import (
     SCHEDULER_LOG_FILE,
@@ -33,23 +31,34 @@ AUTHORIZED_ADMINS = [
     "ishitas@maqsoftware.com"
 ]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FIX C3: verify_admin was reading current_user.get("preferred_username") first,
+# but get_current_user() returns {"email": ..., "name": ...} — "preferred_username"
+# is never in that dict. The "or" fallback to "email" worked accidentally, but
+# any future change could silently deny all admins with a 403.
+# Now we use the canonical "email" key consistently everywhere.
+# ─────────────────────────────────────────────────────────────────────────────
+def _extract_email(user: dict) -> str:
+    """Single helper to extract email from the session dict — used everywhere."""
+    return user.get("email") or ""
+
+
 def verify_admin(current_user: dict = Depends(get_current_user)) -> dict:
     """
-    Middleware dependency that explicitly blocks non-admins from modifying the clock.
+    Dependency that blocks non-admins from mutating scheduler/email config.
     """
-    user_email = current_user.get("preferred_username") or current_user.get("email") or ""
-    
-    if user_email.lower() not in [email.lower() for email in AUTHORIZED_ADMINS]:
-        logger.warning(f"Unauthorized configuration edit attempt by: {user_email}")
+    user_email = _extract_email(current_user)
+
+    if user_email.lower() not in [e.lower() for e in AUTHORIZED_ADMINS]:
+        logger.warning(f"Unauthorized configuration edit attempt by: {user_email!r}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required. You only have permission to view the scheduler."
+            detail="Admin access required. You only have permission to view the scheduler.",
         )
     return current_user
 
 # ──────────────────────────────────────────────────────────────────────────────
 # GET /api/scheduler/check-admin-status
-# Return whether the current user is an admin (for frontend UI display)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.get("/scheduler/check-admin-status")
@@ -58,31 +67,26 @@ async def check_admin_status(current_user: dict = Depends(get_current_user)) -> 
     Check if the current user is an admin.
     Returns { "is_admin": true/false, "email": user_email }
     """
-    user_email = current_user.get("email") or ""
-    is_admin = user_email.lower() in [email.lower() for email in AUTHORIZED_ADMINS]
-    
-    # Debug logging
+    user_email = _extract_email(current_user)
+    is_admin = user_email.lower() in [e.lower() for e in AUTHORIZED_ADMINS]
+
     logger.info(f"Admin check for user: '{user_email}' | is_admin: {is_admin}")
-    logger.info(f"Authorized admins: {AUTHORIZED_ADMINS}")
-    logger.info(f"Lowercase check: '{user_email.lower()}' in {[e.lower() for e in AUTHORIZED_ADMINS]}")
-    
+
     return {
         "is_admin": is_admin,
-        "email": user_email
+        "email": user_email,
     }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration Path Setup
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
-    # Azure Path
     CONFIG_PATH = Path("/home/data/energy-dashboard/scheduler_config.json")
 else:
-    # Local Path
     CONFIG_PATH = Path(__file__).parent.parent.parent / "energy-dashboard" / "scheduler_config.json"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pydantic Model for Frontend Validation
+# Pydantic Models
 # ──────────────────────────────────────────────────────────────────────────────
 class EmailSettings(BaseModel):
     to: str
@@ -101,24 +105,18 @@ class SchedulerStartRequest(BaseModel):
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
-# 🟢 PUBLIC (Read-Only): Anyone logged into the app can view the config
+# 🟢 PUBLIC (Read-Only): Any logged-in user can view the config
 @router.get("/scheduler/config")
 async def get_scheduler_config(current_user: dict = Depends(get_current_user)) -> Dict[str, Any]:
-    """
-    Fetches the current email and scheduler settings for the frontend UI.
-    """
+    """Fetches the current email and scheduler settings for the frontend UI."""
     try:
         config = load_scheduler_config()
         if "start_time" not in config:
             config["start_time"] = config.get("send_time", "09:00")
         config.setdefault("start_time", "09:00")
         for deprecated_key in [
-            "send_time",
-            "reminder_to",
-            "reminder_start_time",
-            "reminder_interval_minutes",
-            "reminder_deadline_time",
-            "custom_message",
+            "send_time", "reminder_to", "reminder_start_time",
+            "reminder_interval_minutes", "reminder_deadline_time", "custom_message",
         ]:
             config.pop(deprecated_key, None)
         config.setdefault(
@@ -135,48 +133,46 @@ async def get_scheduler_config(current_user: dict = Depends(get_current_user)) -
         )
         config.setdefault("uploaded_template_path", None)
         return config
-            
+
     except Exception as e:
         logger.error(f"Failed to read scheduler config: {e}")
         raise HTTPException(status_code=500, detail="Could not read configuration file.")
 
-# 🔴 RESTRICTED (Admins Only): Requires verify_admin dependency
+
+# 🔴 RESTRICTED (Admins Only)
 @router.post("/scheduler/config")
 async def update_scheduler_config(
-    settings: EmailSettings, 
-    admin_user: dict = Depends(verify_admin) # 🚀 SECURITY LOCK APPLIED
+    settings: EmailSettings,
+    admin_user: dict = Depends(verify_admin),
 ):
-    """
-    Saves new email settings from the frontend into the JSON config file.
-    """
+    """Saves new email settings from the frontend into the JSON config file."""
     try:
         existing = load_scheduler_config()
         new_config = {**existing, **settings.model_dump(exclude_none=True)}
         new_config["auto_start"] = True
 
         for deprecated_key in [
-            "send_time",
-            "reminder_to",
-            "reminder_start_time",
-            "reminder_interval_minutes",
-            "reminder_deadline_time",
-            "custom_message",
+            "send_time", "reminder_to", "reminder_start_time",
+            "reminder_interval_minutes", "reminder_deadline_time", "custom_message",
         ]:
             new_config.pop(deprecated_key, None)
 
         save_scheduler_config(new_config)
         initialize_scheduler_from_config()
-            
-        logger.info(f"Frontend updated email settings: To={settings.to}, CC={settings.cc}")
+
+        logger.info(
+            f"Email settings updated by {_extract_email(admin_user)!r}: "
+            f"To={settings.to}, CC={settings.cc}"
+        )
 
         start_scheduler(new_config.get("start_time", "09:00"))
-        
+
         return {
-            "status": "success", 
+            "status": "success",
             "message": "Email configuration updated successfully!",
-            "data": new_config
+            "data": new_config,
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to save scheduler config: {e}")
         raise HTTPException(status_code=500, detail="Could not save configuration file.")
@@ -188,10 +184,11 @@ async def scheduler_status(current_user: dict = Depends(get_current_user)) -> Di
     """Returns active scheduler status and next run time."""
     return get_scheduler_status()
 
+
 # 🟢 PUBLIC (Read-Only)
 @router.get("/scheduler/history")
 async def scheduler_history(current_user: dict = Depends(get_current_user)) -> Dict[str, Any]:
-    """Returns scheduler send history entries from scheduler_log.json (read-only)."""
+    """Returns scheduler send history from scheduler_log.json (read-only)."""
     try:
         if not SCHEDULER_LOG_FILE.exists():
             return {"entries": []}
@@ -220,11 +217,12 @@ async def scheduler_history(current_user: dict = Depends(get_current_user)) -> D
         logger.error(f"Failed to read scheduler history log: {e}")
         raise HTTPException(status_code=500, detail="Could not read scheduler history.")
 
+
 # 🔴 RESTRICTED (Admins Only)
 @router.post("/scheduler/start")
 async def scheduler_start(
     payload: SchedulerStartRequest = Body(default=SchedulerStartRequest()),
-    admin_user: dict = Depends(verify_admin) # 🚀 SECURITY LOCK APPLIED
+    admin_user: dict = Depends(verify_admin),
 ) -> Dict[str, Any]:
     """Starts or updates the recurring daily scheduler with the given time."""
     cfg = load_scheduler_config()
@@ -232,17 +230,14 @@ async def scheduler_start(
     cfg["start_time"] = start_time
     cfg["auto_start"] = True
     for deprecated_key in [
-        "send_time",
-        "reminder_to",
-        "reminder_start_time",
-        "reminder_interval_minutes",
-        "reminder_deadline_time",
-        "custom_message",
+        "send_time", "reminder_to", "reminder_start_time",
+        "reminder_interval_minutes", "reminder_deadline_time", "custom_message",
     ]:
         cfg.pop(deprecated_key, None)
     save_scheduler_config(cfg)
     start_scheduler(start_time)
     return {"status": "running", "start_time": start_time, **get_scheduler_status()}
+
 
 # 🔴 RESTRICTED (Admins Only)
 @router.post("/scheduler/stop")

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from dotenv import load_dotenv
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -23,6 +23,7 @@ logger = get_logger(__name__)
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 
+
 # --- 1. THE UNIFIED LIFESPAN MANAGER ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,24 +31,19 @@ async def lifespan(app: FastAPI):
     logger.info("\n" + "="*50)
     logger.info("VERIFYING ENVIRONMENT VARIABLES")
     logger.info("="*50)
-    
-    # Grab the variables
-    smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com (Default)")
-    smtp_port = os.getenv("SMTP_PORT", "587 (Default)")
-    email_from = os.getenv("EMAIL_FROM", "[MISSING]")
-    operator_mail = os.getenv("OPERATOR_MAIL", "[MISSING]")  # For Ojas
-    report_mail = os.getenv("REPORT_MAIL", "[MISSING]")      # For CEO
-    
-    # 🚀 NEW: Check Auth Variables
-    azure_client = os.getenv("AZURE_CLIENT_ID", "[MISSING]")
-    azure_tenant = os.getenv("AZURE_TENANT_ID", "[MISSING]")
+
+    smtp_server   = os.getenv("SMTP_SERVER", "smtp.gmail.com (Default)")
+    smtp_port     = os.getenv("SMTP_PORT", "587 (Default)")
+    email_from    = os.getenv("EMAIL_FROM", "[MISSING]")
+    operator_mail = os.getenv("OPERATOR_MAIL", "[MISSING]")
+    report_mail   = os.getenv("REPORT_MAIL", "[MISSING]")
+
+    azure_client  = os.getenv("AZURE_CLIENT_ID", "[MISSING]")
+    azure_tenant  = os.getenv("AZURE_TENANT_ID", "[MISSING]")
     session_secret = os.getenv("SESSION_SECRET", "[MISSING]")
-    
+
     email_pwd = os.getenv("EMAIL_PASSWORD")
-    if email_pwd:
-        pwd_status = f"[SET] (Length: {len(email_pwd)})"
-    else:
-        pwd_status = "[MISSING]"
+    pwd_status = f"[SET] (Length: {len(email_pwd)})" if email_pwd else "[MISSING]"
 
     logger.info(f"SMTP_SERVER   : {smtp_server}")
     logger.info(f"SMTP_PORT     : {smtp_port}")
@@ -57,23 +53,23 @@ async def lifespan(app: FastAPI):
     logger.info(f"EMAIL_PASSWORD: {pwd_status}")
     logger.info(f"AZURE_CLIENT_ID : {azure_client}")
     logger.info(f"SESSION_SECRET  : {'[SET]' if session_secret != '[MISSING]' else '[MISSING]'}")
-    
+
     if not email_pwd or email_from == "[MISSING]" or report_mail == "[MISSING]":
         logger.error("CRITICAL: Core email variables are missing. Automated emails WILL fail.")
     elif azure_client == "[MISSING]" or session_secret == "[MISSING]":
         logger.error("CRITICAL: Core authentication variables are missing. Logins WILL fail.")
     else:
         logger.info("SUCCESS: All mail and auth variables loaded successfully.")
-    
+
     logger.info("="*50 + "\n")
 
     # --- PHASE B: Start the Scheduler ---
     logger.info("Starting background scheduler...")
     initialize_scheduler_from_config()
-    
+
     # --- YIELD TO FASTAPI (Server is now running) ---
-    yield 
-    
+    yield
+
     # --- PHASE C: Shutdown Logic ---
     logger.info("Shutting down background scheduler...")
     stop_scheduler(disable_auto_start=False)
@@ -87,20 +83,18 @@ def create_app() -> FastAPI:
     """
     settings = get_settings()
 
-    # Setup logging
     setup_logging(settings.log_level)
 
-    # Create FastAPI app with the unified lifespan attached
     app = FastAPI(
         title=settings.app_name,
         description="API for Energy Consumption Dashboard - Noida Campus",
         version=settings.app_version,
         debug=settings.debug,
-        lifespan=lifespan  
+        lifespan=lifespan,
     )
 
-    # Add CORS middleware
-    # 🚨 CRITICAL FOR AUTH: allow_credentials MUST be True, and allowed_origins_list MUST NOT be ["*"]
+    # 🚨 CRITICAL FOR AUTH: allow_credentials MUST be True, and
+    # allowed_origins_list MUST NOT be ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
@@ -109,7 +103,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Add request/response logging middleware
     @app.middleware("http")
     async def log_requests(request, call_next):
         req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
@@ -120,21 +113,27 @@ def create_app() -> FastAPI:
         log(f"[{req_id}] Status: {response.status_code}")
         response.headers["X-Request-ID"] = req_id
         return response
-    
+
     @app.get("/")
     async def root_health_check():
         return {"status": "running", "message": "Energy Dashboard API"}
 
-    # Health check endpoint
     @app.get("/health")
     async def health_check():
-        """Shallow health check endpoint"""
+        """Shallow health check endpoint — public, used by load balancers."""
         return {"status": "healthy", "service": settings.app_name}
 
-    # Deep health check endpoint
+    # FIX R5: Deep health check now requires authentication.
+    # Previously this endpoint was public and leaked raw exception messages
+    # (up to 120 chars of internal error detail including file paths, SharePoint
+    # URLs, and config details) to any unauthenticated caller.
+    # Now only logged-in users can reach it, and errors are sanitized for the
+    # response while the full detail is still logged server-side.
     @app.get("/api/health/deep")
-    async def deep_health():
-        """Deep health check — tests real SharePoint connectivity."""
+    async def deep_health(
+        current_user: dict = Depends(_get_current_user_dependency()),
+    ):
+        """Deep health check — tests real SharePoint connectivity. Requires auth."""
         results = {}
         overall = "ok"
 
@@ -144,7 +143,10 @@ def create_app() -> FastAPI:
             df = sp.fetch_sheet_data("master_data")
             results["sharepoint"] = "ok" if df is not None else "error"
         except Exception as e:
-            results["sharepoint"] = f"error: {str(e)[:120]}"
+            # Log the full error server-side but return only a generic message
+            # to the client so internal paths/config are never exposed.
+            logger.error(f"Deep health check — SharePoint error: {e}", exc_info=True)
+            results["sharepoint"] = "error: connection failed"
 
         if any("error" in str(v) for v in results.values()):
             overall = "degraded"
@@ -154,12 +156,9 @@ def create_app() -> FastAPI:
 
     # Include routers
     try:
-        # 🚀 NEW: Imported 'auth'
         from app.routes import data, kpis, export, scheduler, mail, auth
-        
-        # 🚀 NEW: Added the auth router
+
         app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-        
         app.include_router(data.router, prefix="/api")
         app.include_router(kpis.router, prefix="/api")
         app.include_router(mail.router, prefix="/api")
@@ -175,8 +174,19 @@ def create_app() -> FastAPI:
 
     return app
 
+
+def _get_current_user_dependency():
+    """
+    Lazily import get_current_user to avoid circular import at module level.
+    This is called once during create_app(), after all modules are loaded.
+    """
+    from app.routes.auth import get_current_user
+    return get_current_user
+
+
 def get_app() -> FastAPI:
     """Get the FastAPI application instance"""
     return create_app()
+
 
 app = create_app()
