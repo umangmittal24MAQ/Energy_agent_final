@@ -104,4 +104,8 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+# Module-level default logger for direct imports
+logger = get_logger("app")
+
+
 # Initialize logging and export default logger

@@ -13,11 +13,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 from app.core.config import get_settings
 from app.core.logger import setup_logging, get_logger
 from app.core.rate_limit import limiter
 from app.services.scheduler_service import initialize_scheduler_from_config, stop_scheduler
+
 
 logger = get_logger(__name__)
 
@@ -37,8 +39,8 @@ async def lifespan(app: FastAPI):
     smtp_server   = os.getenv("SMTP_SERVER", "smtp.gmail.com (Default)")
     smtp_port     = os.getenv("SMTP_PORT", "587 (Default)")
     email_from    = os.getenv("EMAIL_FROM", "[MISSING]")
-    operator_mail = os.getenv("OPERATOR_MAIL", "[MISSING]")
-    report_mail   = os.getenv("REPORT_MAIL", "[MISSING]")
+    operator_mail = os.getenv("OPERATOR_EMAIL", "[MISSING]")
+    report_mail   = os.getenv("REPORT_EMAIL", "[MISSING]")
 
     azure_client  = os.getenv("AZURE_CLIENT_ID", "[MISSING]")
     azure_tenant  = os.getenv("AZURE_TENANT_ID", "[MISSING]")
@@ -99,7 +101,8 @@ def create_app() -> FastAPI:
     # Rate Limiting Setup (FIX RL-01: Protect auth endpoints from DoS)
     # ──────────────────────────────────────────────────────────────────────────
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, limiter.error_handler)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
     #  CRITICAL FOR AUTH: allow_credentials MUST be True, and
     # allowed_origins_list MUST NOT be ["*"]

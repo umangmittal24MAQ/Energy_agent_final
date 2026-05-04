@@ -221,6 +221,7 @@ def run_scraper() -> List[Dict]:
             # ✅ Plain launch + plain new_context
             browser = p.chromium.launch(headless=HEADLESS)
             context = browser.new_context()
+            context.set_default_timeout(1200000)
             page    = context.new_page()
 
             page.on("response", _on_response)

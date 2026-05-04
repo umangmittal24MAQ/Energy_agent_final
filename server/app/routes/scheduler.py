@@ -5,8 +5,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Body, Depends, status
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
+import os
 
-from app.core.logger import logger
+
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 from app.routes.auth import get_current_user
 
 from app.services.scheduler_service import (
@@ -58,7 +62,7 @@ async def check_admin_status(current_user: dict = Depends(get_current_user)) -> 
     Returns { "is_admin": true/false, "email": user_email }
     """
     user_email = _extract_email(current_user)
-    is_admin = user_email.lower() in [e.lower() for e in AUTHORIZED_ADMINS]
+    is_admin = user_email.lower() in [e.lower() for e in _get_authorized_admins()]
 
     logger.info(f"Admin check for user: '{user_email}' | is_admin: {is_admin}")
 
@@ -78,6 +82,9 @@ else:
 # ──────────────────────────────────────────────────────────────────────────────
 # Pydantic Models
 # ──────────────────────────────────────────────────────────────────────────────
+from pydantic import BaseModel, field_validator
+import re
+
 class EmailSettings(BaseModel):
     to: str
     cc: Optional[str] = ""
@@ -87,6 +94,15 @@ class EmailSettings(BaseModel):
     include_sections: Optional[Dict[str, bool]] = None
     uploaded_template_path: Optional[str] = None
 
+    @field_validator("start_time")
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        if not re.match(r"^\d{2}:\d{2}$", v):
+            raise ValueError("start_time must be in HH:MM format (e.g. 09:30)")
+        h, m = v.split(":")
+        if not (0 <= int(h) <= 23 and 0 <= int(m) <= 59):
+            raise ValueError("start_time out of range (00:00–23:59)")
+        return v
 
 class SchedulerStartRequest(BaseModel):
     start_time: Optional[str] = None
@@ -95,7 +111,7 @@ class SchedulerStartRequest(BaseModel):
 # Endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
-# 🟢 PUBLIC (Read-Only): Any logged-in user can view the config
+# PUBLIC (Read-Only): Any logged-in user can view the config
 @router.get("/scheduler/config")
 async def get_scheduler_config(current_user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Fetches the current email and scheduler settings for the frontend UI."""
@@ -235,3 +251,10 @@ async def scheduler_stop(admin_user: dict = Depends(verify_admin)) -> Dict[str, 
     """Stops all scheduler jobs related to daily report automation."""
     result = stop_scheduler()
     return {**result, **get_scheduler_status()}
+
+# TEMP TEST ONLY — remove after testing
+@router.post("/scheduler/test-late-check")
+async def test_late_check(admin_user: dict = Depends(verify_admin)):
+    from app.services.scheduler_service import _run_late_data_check
+    _run_late_data_check()
+    return {"message": "Late check triggered — see backend logs"}

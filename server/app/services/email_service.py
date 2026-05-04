@@ -19,7 +19,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 from zoneinfo import ZoneInfo
 
-from app.core.logger import logger
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Formatting Helpers (From your strict specifications)
@@ -67,17 +69,11 @@ def _get_reminder_cc() -> list[str]:
     return _parse_email_list_from_env(os.getenv("CC_EMAIL", ""))
 
 # Load reminder email lists from environment variables
-_get_reminder_to() = _parse_email_list_from_env(
-    os.getenv("OPERATOR_EMAIL", "")
-)
 if not _get_reminder_to():
     logging.getLogger("app.services.email_service").warning(
         "OPERATOR_EMAIL env var is not set. Reminder emails will have no recipients."
     )
 
-_get_reminder_cc() = _parse_email_list_from_env(
-    os.getenv("CC_EMAIL", "")
-)
 if not _get_reminder_cc():
     logging.getLogger("app.services.email_service").warning(
         "CC_EMAIL env var is not set. Reminder emails will have no CC recipients."
@@ -410,14 +406,14 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
 
         # --- 4. ATTACHMENT AND EMAIL SENDING ---
         try:
+            # Replace lines 414-417 with:
             attachment_df = master_df
             if "Date" in master_df.columns:
-                target_date = pd.to_datetime(report_date_title, errors="coerce",format="mixed")
-                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed")
+                target_date = pd.to_datetime(report_date_title, errors="coerce", format="mixed")
+                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
                 if pd.notna(target_date):
-                    day_rows = master_df[parsed_dates.dt.date == target_date.date()]
-                    if not day_rows.empty:
-                        attachment_df = day_rows
+                    cutoff = target_date - pd.Timedelta(days=30)
+                    attachment_df = master_df[parsed_dates.dt.date >= cutoff.date()]
 
             attachment_bytes = _generate_excel_attachment(attachment_df)
             parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce",format="mixed")

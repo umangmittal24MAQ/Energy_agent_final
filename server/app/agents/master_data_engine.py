@@ -48,6 +48,7 @@ HOSTNAME    = os.getenv("SHAREPOINT_HOSTNAME", "").strip()
 SITE_PATH   = os.getenv("SHAREPOINT_SITE_PATH", "/Admin").strip()
 DRIVE_NAME  = os.getenv("SHAREPOINT_DRIVE_NAME", "").strip()
 BASE_FOLDER = os.getenv("SHAREPOINT_BASE_FOLDER", "").strip()
+GRAPH_BASE  = "https://graph.microsoft.com/v1.0"
 
 if not all([HOSTNAME, DRIVE_NAME, BASE_FOLDER]):
     raise RuntimeError(
@@ -220,7 +221,8 @@ def _compute_solar_units_from_unified(df_solar: pd.DataFrame, for_date: str) -> 
     work["_date"] = pd.to_datetime(work["Date"], errors="coerce").dt.date
     time_col = next((c for c in work.columns if _normalize_key(c) == "time"), None)
     if time_col:
-        work["_time"] = pd.to_datetime(work[time_col], errors="coerce")
+        work["_time"] = pd.to_datetime(work[time_col], format="mixed", errors="coerce")
+
     else:
         work["_time"] = pd.NaT
         

@@ -70,7 +70,7 @@ SCHEDULER_CONFIG_FILE = BASE_DIR / "scheduler_config.json"
 SCHEDULER_LOG_FILE = BASE_DIR / "output" / "scheduler_log.json"           # history list (email_service owns this)
 SCHEDULER_TRACKER_FILE = BASE_DIR / "output" / "scheduler_tracker.json"   # sent-today dict (this file owns this)
 
-# 🔒 Distributed Mutex for Slot Swap Protection
+#  Distributed Mutex for Slot Swap Protection
 SCHEDULER_LOCK_DIR = BASE_DIR.parent / ".scheduler_locks"
 SCHEDULER_LOCK_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -616,12 +616,12 @@ def _run_solar_scraper() -> None:
             check=True,
             timeout=300,
         )
-        logger.info("✅ Scraper subprocess finished successfully.")
+        logger.info(" Scraper subprocess finished successfully.")
 
     except subprocess.TimeoutExpired:
-        logger.error("❌ Scraper subprocess timed out after 300s and was killed.")
+        logger.error("Scraper subprocess timed out after 300s and was killed.")
     except subprocess.CalledProcessError as exc:
-        logger.error(f"❌ Scraper subprocess failed (Exit Code {exc.returncode}).")
+        logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode}).")
     except Exception as exc:
         logger.error(f"Scraper completely failed to trigger: {exc}")
 

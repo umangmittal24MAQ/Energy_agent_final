@@ -11,7 +11,9 @@ from app.services.scheduler_service import (
     load_scheduler_config,
     save_scheduler_config,
 )
-from app.core.logger import logger
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # FIX S1: Import auth dependencies — these were completely missing from this file.
 # Without them, any anonymous caller could trigger report emails to arbitrary

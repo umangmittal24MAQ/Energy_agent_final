@@ -115,7 +115,7 @@ class SharePointDataService:
         
         if missing_vars:
             logger.warning(
-                f"⚠️  SharePoint configuration incomplete. Missing environment variables: {', '.join(missing_vars)}. "
+                f"SharePoint configuration incomplete. Missing environment variables: {', '.join(missing_vars)}. "
                 "Set these in Azure App Settings or .env file:\n"
                 "  - SHAREPOINT_SITE_URL\n"
                 "  - SHAREPOINT_UNIFIED_SOLAR_DRIVE_ID, FOLDER_PATH, FILE_NAME\n"
