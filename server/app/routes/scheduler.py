@@ -252,9 +252,3 @@ async def scheduler_stop(admin_user: dict = Depends(verify_admin)) -> Dict[str, 
     result = stop_scheduler()
     return {**result, **get_scheduler_status()}
 
-# TEMP TEST ONLY — remove after testing
-@router.post("/scheduler/test-late-check")
-async def test_late_check(admin_user: dict = Depends(verify_admin)):
-    from app.services.scheduler_service import _run_late_data_check
-    _run_late_data_check()
-    return {"message": "Late check triggered — see backend logs"}
