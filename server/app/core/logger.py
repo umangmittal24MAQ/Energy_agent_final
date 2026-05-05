@@ -9,7 +9,7 @@ from typing import Optional
 
 # Create logs directory if it doesn't exist
 LOG_DIR = Path(__file__).parent.parent.parent.parent / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 try:
     log_file = Path(os.getenv("LOG_FILE_PATH", str(LOG_DIR / "app.log")))
     error_file = Path(os.getenv("LOG_ERROR_PATH", str(LOG_DIR / "errors.log")))

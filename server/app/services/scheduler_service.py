@@ -21,7 +21,7 @@ import pandas as pd
 # check and both fire the report. The lock makes those operations safe.
 _tracker_lock = threading.Lock()
 _daily_report_tracker: Dict[str, bool] = {}
-_late_engine_ran_today: Dict[str, bool] = {}
+# NOTE: _late_engine_ran_today intentionally removed — see _run_late_data_check.
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -57,21 +57,30 @@ logger = logging.getLogger("app.services.scheduler_service")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration & Paths
+#
+# FIX PATH: Separate code dir (wiped on redeploy) from persistent state dir.
+# scheduler_tracker.json and lock files MUST survive restarts — if lost, the
+# late-data check gate (tracker_is_locked_for_today) always returns False and
+# _run_late_data_check silently skips every tick for the rest of the day.
+#
+# /home/site/wwwroot/  → deployment target, gets overwritten on every deploy
+# /home/LogFiles/      → Azure persistent storage, survives deploys & restarts
 # ──────────────────────────────────────────────────────────────────────────────
 if "WEBSITE_SITE_NAME" in os.environ:
-    BASE_DIR = Path("/home/site/wwwroot/energy-dashboard")
+    BASE_DIR    = Path("/home/site/wwwroot/energy-dashboard")   # code/config — ok to wipe
+    PERSIST_DIR = Path("/home/LogFiles/energy-dashboard")        # state — must survive restarts
 else:
-    BASE_DIR = Path(__file__).parent.parent.parent / "energy-dashboard"
+    BASE_DIR    = Path(__file__).parent.parent.parent / "energy-dashboard"
+    PERSIST_DIR = BASE_DIR
 
 BASE_DIR.mkdir(parents=True, exist_ok=True)
-SCHEDULER_CONFIG_FILE = BASE_DIR / "scheduler_config.json"
+PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+(PERSIST_DIR / "output").mkdir(parents=True, exist_ok=True)
 
-# FIX C4: Two clearly-named files instead of one shared file with format conflicts.
-SCHEDULER_LOG_FILE = BASE_DIR / "output" / "scheduler_log.json"           # history list (email_service owns this)
-SCHEDULER_TRACKER_FILE = BASE_DIR / "output" / "scheduler_tracker.json"   # sent-today dict (this file owns this)
-
-#  Distributed Mutex for Slot Swap Protection
-SCHEDULER_LOCK_DIR = BASE_DIR.parent / ".scheduler_locks"
+SCHEDULER_CONFIG_FILE  = BASE_DIR    / "scheduler_config.json"       # config — ok to reset on deploy
+SCHEDULER_LOG_FILE     = PERSIST_DIR / "output" / "scheduler_log.json"      # must survive restarts
+SCHEDULER_TRACKER_FILE = PERSIST_DIR / "output" / "scheduler_tracker.json"  # must survive restarts
+SCHEDULER_LOCK_DIR     = PERSIST_DIR / ".scheduler_locks"                    # must survive restarts
 SCHEDULER_LOCK_DIR.mkdir(parents=True, exist_ok=True)
 
 SCHEDULER_JOB_ID = "daily_energy_report"
@@ -204,10 +213,6 @@ def _acquire_distributed_lock(job_name: str, ttl_seconds: int = 300) -> bool:
         try:
             if lock_file.exists():
                 # FIX R3: Use timezone-aware UTC datetimes on both sides of the subtraction.
-                # Previously datetime.now() (naive, local) was subtracted from
-                # datetime.fromtimestamp(mtime) (also naive, but potentially UTC on Azure),
-                # producing a lock_age that was up to 5.5 hours wrong on IST servers.
-                # Stale locks were therefore never reaped, permanently blocking jobs.
                 mtime_utc = datetime.fromtimestamp(lock_file.stat().st_mtime, tz=timezone.utc)
                 now_utc = datetime.now(timezone.utc)
                 lock_age = (now_utc - mtime_utc).total_seconds()
@@ -285,10 +290,6 @@ def _normalize_scheduler_recipients(config: Dict[str, Any]) -> Dict[str, Any]:
 # ──────────────────────────────────────────────────────────────────────────────
 def load_scheduler_config() -> Dict[str, Any]:
     """Load scheduler configuration for the UI and Email Service."""
-    # FIX R7: Wrap json.load in a try/except for JSONDecodeError.
-    # If scheduler_config.json is partially written (disk full, process killed
-    # mid-write), json.load raises JSONDecodeError which previously propagated
-    # all the way to crash the server on startup.
     if SCHEDULER_CONFIG_FILE.exists():
         try:
             with open(SCHEDULER_CONFIG_FILE, 'r', encoding='utf-8') as f:
@@ -317,7 +318,6 @@ import tempfile, shutil
 def save_scheduler_config(config: Dict[str, Any]) -> Dict[str, Any]:
     normalized_config = _normalize_scheduler_recipients(config)
     SCHEDULER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # Write to a temp file in the same directory, then atomically rename
     fd, tmp_path = tempfile.mkstemp(
         dir=SCHEDULER_CONFIG_FILE.parent, suffix=".tmp"
     )
@@ -494,8 +494,6 @@ def build_energy_report_html(df: pd.DataFrame) -> str:
         except Exception:
             clean_time = str(raw_time).strip()[:5]
 
-        # FIX R6: html.escape() all values from SharePoint before injecting into HTML.
-        # Excel cells could contain '<', '>', '"' or even script tags from user input.
         def _e(v: Any) -> str:
             return html_lib.escape(str(v)) if v is not None else ""
 
@@ -548,7 +546,17 @@ def _run_master_data_engine_once(
 
 
 def _run_master_data_engine() -> Dict[str, Any]:
-    """Runs the Master Data merge in isolated subprocesses to prevent memory leaks."""
+    """
+    Runs the Master Data merge in isolated subprocesses to prevent memory leaks.
+
+    UNIVERSAL SOLAR DATE RULE:
+    The operator always records yesterday's consumption labelled as today's date.
+    Therefore solar_date = operator_date - 1 day, for every run without exception.
+
+    Monday has two runs because the operator enters two rows:
+      "Sunday" row  → operator_date=sunday,  solar_date=saturday  (scraper ran Saturday)
+      "Monday" row  → operator_date=monday,  solar_date=sunday    (scraper ran Sunday)
+    """
     IST = ZoneInfo("Asia/Kolkata")
     now = datetime.now(IST)
     operator_today = now.strftime("%Y-%m-%d")
@@ -557,22 +565,25 @@ def _run_master_data_engine() -> Dict[str, Any]:
     run_specs = [
         {
             "operator_date": operator_today,
-            "solar_date": solar_yesterday,
+            "solar_date": solar_yesterday,       # universal rule: solar = operator_date - 1
             "fallback_operator_date": None,
         }
     ]
 
-    if now.weekday() == 0:
-        sunday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    if now.weekday() == 0:  # Monday
+        sunday   = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        saturday = (now - timedelta(days=2)).strftime("%Y-%m-%d")
         run_specs = [
             {
+                # "Sunday" row: operator recorded Saturday's consumption as Sunday
                 "operator_date": sunday,
-                "solar_date": sunday,
+                "solar_date": saturday,          # scraper ran on Saturday
                 "fallback_operator_date": operator_today,
             },
             {
+                # "Monday" row: operator recorded Sunday's consumption as Monday
                 "operator_date": operator_today,
-                "solar_date": solar_yesterday,
+                "solar_date": sunday,            # scraper ran on Sunday
                 "fallback_operator_date": None,
             },
         ]
@@ -608,15 +619,12 @@ def _run_solar_scraper() -> None:
         backend_root = Path(__file__).parent.parent.parent
         script_path = backend_root / "scrape_to_sharepoint.py"
 
-        # FIX C5: Added timeout=300 (5 minutes).
-        # Without a timeout, a hung scraper (network issue, deadlock) would
-        # block the APScheduler thread permanently, eventually starving all jobs.
         subprocess.run(
             [sys.executable, str(script_path)],
             check=True,
             timeout=300,
         )
-        logger.info(" Scraper subprocess finished successfully.")
+        logger.info("Scraper subprocess finished successfully.")
 
     except subprocess.TimeoutExpired:
         logger.error("Scraper subprocess timed out after 300s and was killed.")
@@ -637,35 +645,71 @@ def _run_data_refresh() -> None:
 
 def _run_late_data_check() -> None:
     """
-    Runs after the final reminder cycle (10:00 AM onwards).
-    If operator submits data late, silently runs master engine so
-    next day's report has merged data. No email is sent.
+    Runs every 30 min (10:30-19:30) after the report deadline.
+    If operator submits or corrects data late, silently re-runs the master
+    engine so the data is correct. No email is sent.
+
+    KEY BEHAVIOURS:
+    - Runs every tick as long as Status=Done — supports corrections made after
+      the first late submission. The Status=Done gate is the only guard needed.
+    - _late_engine_ran_today flag intentionally REMOVED — it was blocking
+      corrections from being picked up for the rest of the day.
+    - Skips silently if the tracker is not locked (report not sent yet today,
+      or tracker file was lost on restart — log line makes this visible).
+    - Monday: processes both Sunday and Monday rows with correct solar dates,
+      matching the universal rule (solar_date = operator_date - 1).
     """
     IST = ZoneInfo("Asia/Kolkata")
     now = datetime.now(IST)
-    today_str = now.strftime("%Y-%m-%d")
+    today_str     = now.strftime("%Y-%m-%d")
+    yesterday_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # Only relevant if tracker is already locked (report already sent today)
+    # Gate 1: only run after the report has already been sent today
     if not tracker_is_locked_for_today():
+        logger.info("[LATE CHECK] Skipping — tracker not locked (report not yet sent, or tracker file lost on restart)")
         return
 
-    # FIX R4: guard the read of _late_engine_ran_today with the lock
-    with _tracker_lock:
-        if _late_engine_ran_today.get(today_str):
-            return
-
+    # Gate 2: operator data must exist and be marked Done
     if not check_grid_diesel_entry_exists():
         return
 
-    logger.info("Late operator data detected after deadline. Running master engine silently...")
-    engine_result = _run_master_data_engine()
+    logger.info("[LATE CHECK] Operator data found after deadline. Running master engine silently...")
 
-    if engine_result["status"] == "Success":
-        with _tracker_lock:
-            _late_engine_ran_today[today_str] = True
-        logger.info("✅ Late master engine run complete. Tomorrow's report will use updated data.")
+    if now.weekday() == 0:  # Monday
+        saturday_str = (now - timedelta(days=2)).strftime("%Y-%m-%d")
+        specs = [
+            {
+                # "Sunday" row: Saturday's consumption → solar from Saturday
+                "operator_date": yesterday_str,
+                "solar_date":    saturday_str,
+                "fallback_operator_date": today_str,
+            },
+            {
+                # "Monday" row: Sunday's consumption → solar from Sunday
+                "operator_date": today_str,
+                "solar_date":    yesterday_str,
+                "fallback_operator_date": None,
+            },
+        ]
     else:
-        logger.error(f"Late master engine run failed: {engine_result.get('error')}")
+        specs = [
+            {
+                "operator_date": today_str,
+                "solar_date":    yesterday_str,   # universal rule: solar = operator_date - 1
+                "fallback_operator_date": None,
+            }
+        ]
+
+    for spec in specs:
+        result = _run_master_data_engine_once(
+            spec["operator_date"],
+            spec["solar_date"],
+            spec.get("fallback_operator_date"),
+        )
+        if result["status"] == "Success":
+            logger.info(f"[LATE CHECK] Master engine complete for {spec['operator_date']}.")
+        else:
+            logger.error(f"[LATE CHECK] Engine failed for {spec['operator_date']}: {result.get('error')}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -686,7 +730,7 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
     IST = ZoneInfo("Asia/Kolkata")
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
 
-    # 🔒 Distributed lock — scheduler only (prevents slot-swap double-fire)
+    # Distributed lock — scheduler only (prevents slot-swap double-fire)
     job_name = "daily_energy_report"
     if trigger_source == "scheduler":
         if not _acquire_distributed_lock(job_name, ttl_seconds=300):
@@ -838,8 +882,8 @@ def initialize_scheduler_from_config() -> None:
     persistent_tracker = _load_tracker_from_log()
     with _tracker_lock:
         _daily_report_tracker.update(persistent_tracker)
-    if persistent_tracker:
-        logger.info(f"✅ Loaded persistent tracker from disk: {persistent_tracker}")
+    # Always log — empty means tracker file was missing or today not yet in it
+    logger.info(f"Startup tracker state: {persistent_tracker or 'empty — no report sent yet today'}")
 
     _run_data_refresh()
 
