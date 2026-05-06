@@ -7,6 +7,7 @@ Usage:
   python master_data_engine.py               # Processes yesterday's data
   python master_data_engine.py 2026-04-08    # Processes a specific date
 """
+import math
 import os
 import sys
 import io
@@ -338,19 +339,23 @@ def process_master_data(
     logger.info(f"   Calculated Savings (INR): ₹{energy_savings_inr:,.2f}")
     
     # 🚀 THE FIX: Determine the Day strictly using the Operator Date
-    consumption_dt = pd.to_datetime(operator_date)
+    consumption_dt = pd.to_datetime(solar_date, errors="coerce")
+
+    if pd.isna(consumption_dt):
+        logger.error(f" Invalid solar_date: {solar_date!r}. Aborting.")
+        return
     
     # 7. Build the Master Row
     master_row = {
-        "Date": operator_date,                      
+        "Date": solar_date,                      
         "Day":  consumption_dt.strftime("%A"), # This now correctly outputs "Monday" on Mondays!
         "Time": _get_fuzzy(grid_today, "time", "09:00"),
         "Ambient Temperature °C": _get_fuzzy(grid_today, "ambient", ""),
         "Grid Units Consumed (KWh)": grid_units,
         "Solar Units Consumed(KWh)": solar_units,
         "Total Units Consumed (KWh)": total_units,
-        "Total Units Consumed in INR": grid_cost_inr,
-        "Energy Saving in INR": round(energy_savings_inr, 2),
+        "Total Units Consumed in INR": math.ceil(grid_cost_inr),
+        "Energy Saving in INR": math.ceil(energy_savings_inr),
         "Number of Panels Cleaned": _get_fuzzy(grid_today, "panelscleaned", 0),
         "Diesel consumed": _get_fuzzy(grid_today, "diesel", "0"),
         "Water treated through STP": _get_fuzzy(grid_today, "stp", "0"),
@@ -369,14 +374,14 @@ def process_master_data(
     df_master['Date_Str'] = _robust_parse_date(df_master['Date'])
     
     # 🚀 The deduplication check cleanly matches the exact date inserted.
-    df_master = df_master[df_master['Date_Str'] != operator_date].drop(columns=['Date_Str'])
+    df_master = df_master[df_master['Date_Str'] != solar_date].drop(columns=['Date_Str'])
     
     new_df = pd.DataFrame([master_row])
     df_master = pd.concat([df_master, new_df], ignore_index=True)
     
     logger.info("Uploading updated Master-data.xlsx to SharePoint...")
     upload_excel("Master-data.xlsx", df_master)
-    logger.info("✅ Master data synchronization SUCCESS!")
+    logger.info(" Master data synchronization SUCCESS!")
 
 if __name__ == "__main__":
     import sys

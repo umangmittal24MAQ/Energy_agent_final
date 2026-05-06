@@ -137,12 +137,26 @@ def _enrich_unified_with_live_solar(df_master: pd.DataFrame) -> pd.DataFrame:
 
 def _get_master_data(start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
     """Core function to fetch and filter unified data from Electrical Optimization."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
     sp_service = get_excel_service()
     df = sp_service.fetch_sheet_data("master_data")
-    
+
     if df is None or df.empty:
         return pd.DataFrame()
-    
+
+    # Solar data is always from the PREVIOUS day.
+    # When the frontend asks for "today", shift the window back by 1 day.
+    ist_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    today_str = ist_now.strftime("%Y-%m-%d")
+    yesterday_str = (ist_now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if start_date == today_str:
+        start_date = yesterday_str
+    if end_date == today_str:
+        end_date = yesterday_str
+
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         if start_date:

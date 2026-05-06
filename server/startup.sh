@@ -39,14 +39,21 @@ else
 fi
 
 # --- 4. OS & Browser Dependencies ---
-BROWSER_STAMP="/home/site/pw-browsers/.installed"
+echo "Checking Playwright browser installation..."
+
+# Get the exact version of the Playwright Python package installed in the antenv
+PW_VERSION=$(python3 -c "import playwright; print(playwright.__version__)" 2>/dev/null || echo "unknown")
+BROWSER_STAMP="/home/site/pw-browsers/.installed_${PW_VERSION}"
 
 if [ ! -f "$BROWSER_STAMP" ]; then
-    echo "Downloading Playwright Chromium to persistent storage..."
+    echo "Downloading Playwright Chromium (v${PW_VERSION}) to persistent storage..."
     python3 -m playwright install chromium
+    
+    # Clean up any old version stamps so we don't leak files
+    rm -f /home/site/pw-browsers/.installed_*
     touch "$BROWSER_STAMP"
 else
-    echo "Playwright Chromium already in persistent storage, skipping download..."
+    echo "Playwright Chromium (v${PW_VERSION}) already in persistent storage, skipping download..."
 fi
 
 echo "Installing missing Linux OS system libraries..."

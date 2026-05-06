@@ -5,8 +5,6 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Body, Depends, status
 from pydantic import BaseModel
 from typing import Optional, Any, Dict
-import os
-
 
 from app.core.logger import get_logger
 
@@ -31,7 +29,13 @@ router = APIRouter(tags=["Scheduler Configuration"])
 def _get_authorized_admins() -> list[str]:
     """Read admin list from environment at request time, never at import time."""
     raw = os.getenv("AUTHORIZED_ADMINS", "")
-    return [e.strip().lower() for e in raw.split(",") if e.strip()]
+    admins = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    
+    # FIX: Add warning log when the list is empty to assist with debugging missing App Settings
+    if not admins:
+        logger.warning("AUTHORIZED_ADMINS is empty — all admin actions will be denied.")
+        
+    return admins
 # ─────────────────────────────────────────────────────────────────────────────
 # FIX C3: verify_admin was reading current_user.get("preferred_username") first,
 # but get_current_user() returns {"email": ..., "name": ...} — "preferred_username"
@@ -89,7 +93,7 @@ class EmailSettings(BaseModel):
     to: str
     cc: Optional[str] = ""
     start_time: str = "09:00"
-    subject: str
+
     auto_start: Optional[bool] = True
     include_sections: Optional[Dict[str, bool]] = None
     uploaded_template_path: Optional[str] = None
@@ -155,6 +159,7 @@ async def update_scheduler_config(
     try:
         existing = load_scheduler_config()
         new_config = {**existing, **settings.model_dump(exclude_none=True)}
+        new_config["subject"] = existing["subject"] 
         new_config["auto_start"] = True
 
         for deprecated_key in [

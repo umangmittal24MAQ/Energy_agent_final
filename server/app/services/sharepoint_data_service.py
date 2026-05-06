@@ -72,7 +72,9 @@ def _load_sharepoint_config_from_env() -> Dict:
     }
 
 
-# Load configuration from environment variables (NOT hardcoded)
+# Loaded once at startup.
+# Azure App Service restarts the process when App Settings change,
+# so this stays current without request-time reload.
 SHAREPOINT_CONFIG = _load_sharepoint_config_from_env()
 
 

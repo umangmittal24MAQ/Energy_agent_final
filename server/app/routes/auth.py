@@ -45,10 +45,6 @@ _jwks_cache: Dict[str, Any] = {}
 _jwks_locks: Dict[str, asyncio.Lock] = {}
 _JWKS_TTL_SECONDS = 3600           # 1 hour
 
-import asyncio
-
-_jwks_cache: Dict[str, Any] = {}
-_jwks_locks: Dict[str, asyncio.Lock] = {}
 
 async def _get_jwks(tenant_id: str) -> Dict:
     # Fast path — no lock needed for read if already populated
@@ -56,8 +52,8 @@ async def _get_jwks(tenant_id: str) -> Dict:
     if cached and (time.time() - cached["fetched_at"]) < _JWKS_TTL_SECONDS:
         return cached["data"]
 
-    if tenant_id not in _jwks_locks:
-        _jwks_locks[tenant_id] = asyncio.Lock()
+    # FIX: Use setdefault for atomic lock creation to prevent concurrent duplicate fetches
+    _jwks_locks.setdefault(tenant_id, asyncio.Lock())
 
     async with _jwks_locks[tenant_id]:
         # Re-check inside lock (another coroutine may have populated it)

@@ -37,10 +37,17 @@ async def get_integration_status():
     from app.services.sharepoint_data_service import get_service
 
     sp_service = get_service()
+    last_err = sp_service.get_last_error()
+    
+    # FIX: Log the raw error server-side to prevent leaking internal 
+    # Graph API details or tenant IDs to the client.
+    if last_err:
+        logger.error(f"SharePoint Integration Error: {last_err}")
+
     return {
         "sharepoint": {
             "authenticated": sp_service.authenticated,
-            "last_error": sp_service.get_last_error(),
+            "last_error": "error occurred — check server logs" if last_err else None,
         },
         "architecture": "Unified-Excel-Graph-API",
     }
