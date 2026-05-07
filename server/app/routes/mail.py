@@ -1,7 +1,7 @@
 """
 API Router for manual email triggers and connection tests.
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Body
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Body, Depends
 from pydantic import BaseModel, field_validator
 from typing import Optional
 
@@ -11,9 +11,18 @@ from app.services.scheduler_service import (
     load_scheduler_config,
     save_scheduler_config,
 )
-from app.core.logger import logger
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
+
+# FIX S1: Import auth dependencies — these were completely missing from this file.
+# Without them, any anonymous caller could trigger report emails to arbitrary
+# recipients and overwrite scheduler_config.json via the request body.
+from app.routes.auth import get_current_user
+from app.routes.scheduler import verify_admin
 
 router = APIRouter(prefix="/mail", tags=["Mail Service"])
+
 
 class TestEmailRequest(BaseModel):
     recipient: str
@@ -35,14 +44,20 @@ class ManualReportRequest(BaseModel):
     subject: Optional[str] = None
     start_time: Optional[str] = None
 
+
+# FIX S1: send-daily-report now requires verify_admin.
+# This endpoint mutates scheduler_config.json and fires real emails —
+# it must be restricted to admins, matching the protection on /scheduler/config.
 @router.post("/send-daily-report")
 async def trigger_manual_report(
     background_tasks: BackgroundTasks,
     request: ManualReportRequest = Body(default=ManualReportRequest()),
+    admin_user: dict = Depends(verify_admin),
 ):
     """
-    Manually triggers the daily energy report email. 
+    Manually triggers the daily energy report email.
     Runs in the background to prevent the API from hanging.
+    Restricted to admin users only.
     """
     if any(
         value is not None
@@ -59,21 +74,30 @@ async def trigger_manual_report(
             config["start_time"] = request.start_time
         save_scheduler_config(config)
 
-    logger.info("Manual daily report triggered via API.")
+    logger.info(
+        f"Manual daily report triggered by {admin_user.get('email')!r} via API."
+    )
     background_tasks.add_task(run_daily_report_automation, trigger_source="api_manual")
     return {"message": "Daily report generation started in background."}
 
+
+# FIX S1: test-connection now requires a logged-in user (not necessarily admin).
+# Without auth, anyone could probe whether SMTP credentials are valid.
 @router.post("/test-connection")
-async def send_test_email(request: TestEmailRequest):
+async def send_test_email(
+    request: TestEmailRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Sends a simple text email to verify SMTP credentials.
+    Requires an authenticated session.
     """
     result = email_service.send_test_connection(
         recipient=request.recipient,
         subject=request.subject,
-        message=request.message
+        message=request.message,
     )
-    
+
     if result["status"] == "Success":
         return result
     else:

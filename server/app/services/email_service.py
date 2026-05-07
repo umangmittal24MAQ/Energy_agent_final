@@ -19,7 +19,9 @@ from datetime import datetime, timedelta
 import pandas as pd
 from zoneinfo import ZoneInfo
 
-from app.core.logger import logger
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Formatting Helpers (From your strict specifications)
@@ -53,19 +55,29 @@ def normalizeIssueText(value: Any) -> str:
     return text.lower()[:1].upper() + text.lower()[1:]
 
 
-REMINDER_TO_DISPLAY = [
-    "Parag Kulshrestha | MAQ Software <paragk@maqsoftware.com>",
-    "Shailesh | MAQ Software <shaileshl@maqsoftware.com>",
-    "Ojas Upadhyay | MAQ Software <ojasu@maqsoftware.com>",
-]
+def _parse_email_list_from_env(env_value: str) -> list[str]:
+    """Parse comma-separated email addresses from environment variable."""
+    if not env_value:
+        return []
+    # Split by comma and strip whitespace, filter empty strings
+    return [email.strip() for email in env_value.split(',') if email.strip()]
 
-REMINDER_CC_DISPLAY = [
-    "Prajwal Yuvraj Khadse | MAQ Software <prajwal.khadse@maqsoftware.com>",
-    "Krishna Vatsa | MAQ Software <krishnav@maqsoftware.com>",
-    "Ishita Singh | MAQ Software <ishitas@maqsoftware.com>",
-    "Umang Mittal | MAQ SOftware <umang.mittal@maqsoftware.com>"
-]
+def _get_reminder_to() -> list[str]:
+    return _parse_email_list_from_env(os.getenv("OPERATOR_EMAIL", ""))
 
+def _get_reminder_cc() -> list[str]:
+    return _parse_email_list_from_env(os.getenv("CC_EMAIL", ""))
+
+# Load reminder email lists from environment variables
+if not _get_reminder_to():
+    logging.getLogger("app.services.email_service").warning(
+        "OPERATOR_EMAIL env var is not set. Reminder emails will have no recipients."
+    )
+
+if not _get_reminder_cc():
+    logging.getLogger("app.services.email_service").warning(
+        "CC_EMAIL env var is not set. Reminder emails will have no CC recipients."
+    )
 
 def _emails_from_display(items: list[str]) -> list[str]:
     parsed = getaddresses(items)
@@ -73,28 +85,86 @@ def _emails_from_display(items: list[str]) -> list[str]:
 
 
 def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
-    """Append one send-history record to scheduler_log.json without affecting mail flow."""
+    """
+    Append one send-history record to scheduler_log.json (JSON list format).
+    This file is exclusively owned by email_service and always stays a list.
+ 
+    FIX C4: scheduler_service now writes its tracker dict to a SEPARATE file
+    (scheduler_tracker.json), so there is no longer a format collision between
+    the two services writing to the same file.
+    """
     try:
         from app.services.scheduler_service import SCHEDULER_LOG_FILE
-
+ 
         SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         history: list[Dict[str, Any]] = []
-
+ 
         if SCHEDULER_LOG_FILE.exists():
             try:
                 with open(SCHEDULER_LOG_FILE, "r", encoding="utf-8") as f:
                     payload = json.load(f)
                 if isinstance(payload, list):
                     history = payload
+                # If it's a dict (leftover from old code), discard it and start fresh.
+                # After this fix, that can only happen during one-time migration.
             except Exception:
                 history = []
-
+ 
         history.append(entry)
+        MAX_HISTORY = 500
+        history = history[-MAX_HISTORY:]
         with open(SCHEDULER_LOG_FILE, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
     except Exception as exc:
         logger.warning(f"Failed to append scheduler history entry: {exc}")
+ 
 
+def send_admin_alert(subject: str, error_message: str) -> None:
+    """
+    Send a plain-text fallback alert to the admin when the daily report fails.
+ 
+    FIX S4: No longer has a hardcoded personal email as a fallback default.
+    Set ADMIN_ALERT_EMAIL in your environment / Azure App Settings.
+    If not set, the alert is skipped and a warning is logged.
+    """
+    admin_email = os.getenv("ADMIN_ALERT_EMAIL")
+    if not admin_email:
+        logger.warning(
+            "send_admin_alert: ADMIN_ALERT_EMAIL env var is not set. "
+            f"Skipping admin alert for: {subject}"
+        )
+        return
+ 
+    try:
+        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port = int(os.getenv("SMTP_PORT", 587))
+        email_from = os.getenv("EMAIL_FROM", "")
+        sender_password = os.getenv("EMAIL_PASSWORD", "")
+ 
+        if not email_from or not sender_password:
+            logger.error("send_admin_alert: EMAIL_FROM or EMAIL_PASSWORD not set. Cannot send alert.")
+            return
+ 
+        msg = MIMEText(
+            f"Energy Dashboard Alert\n\n"
+            f"Subject: {subject}\n"
+            f"Time: {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}\n\n"
+            f"Error:\n{error_message}",
+            "plain",
+        )
+        msg["From"] = email_from
+        msg["To"] = admin_email
+        msg["Subject"] = f"[ALERT] Energy Dashboard: {subject}"
+ 
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_from, sender_password)
+            server.sendmail(email_from, [admin_email], msg.as_string())
+ 
+        logger.info(f"Admin alert sent to {admin_email}: {subject}")
+    except Exception as alert_exc:
+        logger.error(f"Failed to send admin alert: {alert_exc}")
+ 
 def _normalize_col_name(name: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(name).lower())
 
@@ -142,8 +212,8 @@ def _compute_yesterday_generation_for_email(sp_service: Any, for_date: Optional[
         )
         time_col = _find_column(df, ["Time"])
 
-        parsed_date = pd.to_datetime(df[date_col], errors="coerce").dt.date
-        parsed_time = pd.to_datetime(df[time_col], errors="coerce") if time_col else pd.Series(pd.NaT, index=df.index)
+        parsed_date = pd.to_datetime(df[date_col], errors="coerce",format="mixed").dt.date
+        parsed_time = pd.to_datetime(df[time_col], errors="coerce",format="mixed") if time_col else pd.Series(pd.NaT, index=df.index)
 
         if for_date is not None:
             ist_today = pd.to_datetime(for_date).date()
@@ -249,20 +319,24 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         if manual_date:
             report_date_title = manual_date
         elif "Date" in master_df.columns:
-            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
             today_mask = parsed_dates.dt.date == today.date()
             if today_mask.any():
-                report_date_title = str(master_df.loc[today_mask].iloc[-1].get("Date", report_date_title))
+                today_rows_master = master_df.loc[today_mask]
+                if not today_rows_master.empty:
+                    report_date_title = str(today_rows_master.iloc[-1].get("Date", report_date_title))
             elif today.weekday() == 0:
                 sunday_date = (today - timedelta(days=1)).date()
                 sunday_mask = parsed_dates.dt.date == sunday_date
                 if sunday_mask.any():
-                    report_date_title = str(master_df.loc[sunday_mask].iloc[-1].get("Date", report_date_title))
-                else:
+                    sunday_rows = master_df.loc[sunday_mask]
+                    if not sunday_rows.empty:
+                        report_date_title = str(sunday_rows.iloc[-1].get("Date", report_date_title))
+                elif not master_df.empty:
                     report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-            else:
+            elif not master_df.empty:
                 report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-        else:
+        elif not master_df.empty:
             report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
 
         # --- 1.5 OVERRIDE YESTERDAY GENERATION FOR EMAIL CONTENT ---
@@ -287,7 +361,7 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             solar_units_source_col = "Solar Units Consumed(KWh)"
             master_df[solar_units_source_col] = ""
 
-        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce").dt.date
+        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed").dt.date
         updated_any = False
         for r_date in report_dates:
             selected_gen = _compute_yesterday_generation_for_email(sp_service, for_date=r_date)
@@ -334,15 +408,39 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         try:
             attachment_df = master_df
             if "Date" in master_df.columns:
-                target_date = pd.to_datetime(report_date_title, errors="coerce")
-                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce")
+                target_date = pd.to_datetime(report_date_title, errors="coerce", format="mixed")
+                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
                 if pd.notna(target_date):
-                    day_rows = master_df[parsed_dates.dt.date == target_date.date()]
-                    if not day_rows.empty:
-                        attachment_df = day_rows
+                    cutoff = target_date - pd.Timedelta(days=30)
+                    attachment_df = master_df[parsed_dates.dt.date >= cutoff.date()]
+
+            # Only include the columns needed in the attachment
+            ATTACHMENT_COLUMNS = [
+                "Date",
+                "Day",
+                "Time",
+                "Ambient Temperature °C",
+                "Grid Units Consumed (KWh)",
+                "Solar Units Consumed(KWh)",
+                "Total Units Consumed (KWh)",
+                "Total Units Consumed in INR",
+                "Energy Saving in INR",
+                "Number of Panels Cleaned",
+                "Diesel consumed",
+                "Water treated through STP",
+                "Water treated through WTP",
+                "Issues",
+            ]
+            # Only keep columns that actually exist in master_df (safe against column name changes)
+            cols_present = [c for c in ATTACHMENT_COLUMNS if c in attachment_df.columns]
+            missing = [c for c in ATTACHMENT_COLUMNS if c not in attachment_df.columns]
+            if missing:
+                logger.warning(f"[ATTACHMENT] These expected columns were not found in master_df: {missing}")
+            attachment_df = attachment_df[cols_present]
+
 
             attachment_bytes = _generate_excel_attachment(attachment_df)
-            parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce")
+            parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce", format="mixed")
             attachment_suffix = (
                 parsed_attachment_date.strftime("%Y%m%d")
                 if pd.notna(parsed_attachment_date)
@@ -368,10 +466,9 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         
         # --- 1. Format the Subject Date to current day (or manual override) ---
         try:
-            subject_date_source = manual_date or today.strftime("%Y-%m-%d")
-            subject_date_str = pd.to_datetime(subject_date_source).strftime("%B %d, %Y").replace(" 0", " ")
+            subject_date_str = pd.to_datetime(report_date_title, format="mixed").strftime("%B %d, %Y").replace(" 0", " ")
         except Exception:
-            subject_date_str = today.strftime("%B %d, %Y").replace(" 0", " ")
+            subject_date_str = report_date_title
 
         # --- 2. Inject Date and Clean Encoding ---
         raw_subject = sched_config.get("subject", "Daily Energy Report - Noida Campus - {date}")
@@ -411,11 +508,13 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             }
         )
 
+        logger.warning(f"Daily report sent OK to {len(all_recipients)} recipients (attachment: {attachment_name})")
         return {"status": "Success", "recipients": ", ".join(all_recipients), "attachment": attachment_name}
 
     except Exception as e:
         from app.core.logger import logger
         logger.error(f"Failed to send daily report: {e}")
+        send_admin_alert("Daily report FAILED", str(e))
 
         _append_scheduler_send_history(
             {
@@ -443,7 +542,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
     # 1. Clean and Sort the Data
     df = df.copy()
     if "Date" in df.columns:
-        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce",format="mixed")
         df = df.dropna(subset=["_parsed_date"])
         df = df.sort_values(by="_parsed_date", ascending=False).head(30)
     else:
@@ -604,6 +703,122 @@ def _generate_excel_attachment(df: pd.DataFrame) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 # Mail Dispatchers
 # ──────────────────────────────────────────────────────────────────────────────
+def send_data_correction_alert(errors: list) -> Dict[str, Any]:
+    """
+    Sends a detailed correction email to the operator listing every invalid cell.
+    """
+    try:
+        smtp_server     = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port       = int(os.getenv("SMTP_PORT", 587))
+        email_from      = os.getenv("EMAIL_FROM", "")
+        sender_password = os.getenv("EMAIL_PASSWORD", "")
+
+        to_list = _emails_from_display(_get_reminder_to())
+        cc_list = _emails_from_display(_get_reminder_cc())
+        all_recipients = to_list + cc_list
+
+        if not all_recipients:
+            logger.error("[DATA ALERT] No OPERATOR_EMAIL set — cannot send correction alert.")
+            return {"status": "Failed", "error": "No operator email configured"}
+
+        IST = ZoneInfo("Asia/Kolkata")
+        today_str = datetime.now(IST).strftime("%B %d, %Y")
+
+        # Build one table row per error
+        rows_html = ""
+        for e in errors:
+            rows_html += f"""
+            <tr>
+              <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-weight:500;color:#333;">
+                {html_lib.escape(str(e['column']))}
+              </td>
+              <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;color:#c0392b;font-family:monospace;">
+                {html_lib.escape(str(e['value']))}
+              </td>
+              <td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;color:#555;">
+                {html_lib.escape(str(e['error']))}
+              </td>
+            </tr>"""
+
+        # Build format hints per column type
+        hints_html = """
+        <ul style="color:#555;font-size:13px;line-height:1.8;margin:10px 0 0 0;padding-left:18px;">
+          <li><b>Date</b> — e.g. <code>05-May-2026</code></li>
+          <li><b>Day</b> — full day name, e.g. <code>Tuesday</code></li>
+          <li><b>Time</b> — HH:MM format, e.g. <code>10:30</code> &nbsp;(not <code>10-30</code>)</li>
+          <li><b>Numeric columns</b> — plain number or comma-separated, e.g. <code>4,452</code> or <code>4452</code></li>
+          <li><b>Issues</b> — plain text, e.g. <code>No issues</code></li>
+        </ul>"""
+
+        body_html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:680px;margin:auto;padding:20px;color:#333;">
+
+          <div style="border-left:5px solid #ffc107;padding:16px 20px;border-radius:4px;margin-bottom:20px;">
+            <h2 style="color:#856404;margin:0 0 6px;font-size:17px;">
+              Action Required: Invalid Data in Today's Entry
+            </h2>
+            <p style="margin:0;font-size:14px;">
+              The automated pipeline found <b>{len(errors)} error(s)</b> in the
+              Grid &amp; Diesel Excel sheet for <b>{today_str}</b>.
+              The daily report will <b>not be sent</b> until these are corrected.
+            </p>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;overflow:hidden;">
+            <thead>
+              <tr style="background:#f5f5f5;">
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e0e0e0;">Column</th>
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e0e0e0;">Value Entered</th>
+                <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #e0e0e0;">Problem</th>
+              </tr>
+            </thead>
+            <tbody>{rows_html}</tbody>
+          </table>
+
+          <div style="margin-top:18px;background:#f9f9f9;border:1px solid #e0e0e0;border-radius:4px;padding:14px 18px;">
+            <p style="margin:0 0 6px;font-size:13px;font-weight:600;">Expected formats:</p>
+            {hints_html}
+          </div>
+
+          <p style="margin-top:18px;font-size:13px;color:#888;">
+            Please fix the above in the SharePoint Excel file and re-save.
+            The pipeline will pick up the corrected data automatically at the next check.
+          </p>
+        </div>"""
+
+        subject = f"⚠️ Action Required: Fix Excel Data for {today_str} ({len(errors)} error(s))"
+
+        msg = MIMEMultipart("alternative")
+        msg["From"]    = email_from
+        msg["To"]      = ", ".join(to_list)
+        if cc_list:
+            msg["Cc"]  = ", ".join(cc_list)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_html, "html"))
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_from, sender_password)
+            server.sendmail(email_from, all_recipients, msg.as_string())
+
+        _append_scheduler_send_history({
+            "timestamp":      datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+            "status":         "Success",
+            "kind":           "data_correction_alert",
+            "trigger_source": "validation",
+            "subject":        subject,
+            "recipients":     ", ".join(all_recipients),
+            "attachment":     None,
+            "notes":          f"{len(errors)} validation error(s) reported",
+        })
+
+        logger.info(f"[DATA ALERT] Correction email sent to {all_recipients}")
+        return {"status": "Success", "errors_reported": len(errors)}
+
+    except Exception as e:
+        logger.error(f"[DATA ALERT] Failed to send correction email: {e}")
+        return {"status": "Failed", "error": str(e)}
+    
 def send_operator_reminder() -> Dict[str, Any]:
     try:
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -611,8 +826,8 @@ def send_operator_reminder() -> Dict[str, Any]:
         email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
 
-        to_list = _emails_from_display(REMINDER_TO_DISPLAY)
-        cc_list = _emails_from_display(REMINDER_CC_DISPLAY)
+        to_list = _emails_from_display(_get_reminder_to())
+        cc_list = _emails_from_display(_get_reminder_cc())
 
         all_recipients = to_list + cc_list
         if not all_recipients:
@@ -641,9 +856,9 @@ def send_operator_reminder() -> Dict[str, Any]:
         msg = MIMEMultipart("alternative")
         msg["From"] = email_from
 
-        msg["To"] = ", ".join(REMINDER_TO_DISPLAY)
+        msg["To"] = ", ".join(_get_reminder_to())
         if cc_list:
-            msg["Cc"] = ", ".join(REMINDER_CC_DISPLAY)
+            msg["Cc"] = ", ".join(_get_reminder_cc())
 
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
@@ -675,11 +890,9 @@ def send_operator_reminder() -> Dict[str, Any]:
                 "kind": "operator_reminder",
                 "trigger_source": "operator_reminder_cycle",
                 "subject": "Action Required: Operator Data Missing",
-                "recipients": ", ".join(_emails_from_display(REMINDER_TO_DISPLAY + REMINDER_CC_DISPLAY)),
+                "recipients": ", ".join(_emails_from_display(_get_reminder_to() + _get_reminder_cc())),
                 "attachment": None,
                 "notes": str(e),
             }
         )
         return {"status": "Failed", "error": str(e)}
-
-

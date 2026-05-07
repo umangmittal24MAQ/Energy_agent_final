@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any
 from functools import lru_cache
 from pydantic_settings import BaseSettings
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +34,21 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", validation_alias="APP_ENV")
     app_name: str = Field(default="Energy Dashboard", validation_alias="APP_NAME")
     app_version: str = Field(default="1.0.0", validation_alias="APP_VERSION")
-    debug: bool = Field(default=True)
+    debug: bool = Field(
+        default=True,
+        validation_alias="DEBUG",
+        description="Enable debug mode. MUST be False in production to prevent stack trace exposure."
+    )
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
     # API Server
     api_host: str = Field(default="0.0.0.0", validation_alias="API_HOST")
     api_port: int = Field(default=8000, validation_alias="API_PORT")
-    api_reload: bool = Field(default=True, validation_alias="API_RELOAD")
+    api_reload: bool = Field(
+        default=True,
+        validation_alias="API_RELOAD",
+        description="Enable hot-reload for development. MUST be False in production."
+    )
     frontend_url: str = Field(default="http://localhost:5173", validation_alias="FRONTEND_URL")
 
     # SharePoint Graph API
@@ -67,8 +75,9 @@ class Settings(BaseSettings):
     # General
     timezone: str = Field(default="Asia/Kolkata", validation_alias="TIMEZONE")
     allowed_origins: str = Field(
-        default="http://localhost:5172,http://127.0.0.1:5172,http://localhost:5173,http://127.0.0.1:5173",
-        validation_alias="ALLOWED_ORIGINS"
+        default="",
+        validation_alias="ALLOWED_ORIGINS",
+        description="CORS allowed origins. Must be set via environment variable. In production, use only HTTPS URLs (e.g., https://your-frontend.azurestaticapps.net). Never include localhost in production."
     )
 
     # Cost Configuration
@@ -82,9 +91,51 @@ class Settings(BaseSettings):
         case_sensitive = False
         extra = "allow"
 
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        """Validate security-critical settings for production deployments."""
+        if self.app_env == "production":
+            # Validate CORS origins
+            if self.allowed_origins:
+                localhost_origins = [
+                    o.strip() for o in self.allowed_origins.split(",")
+                    if ("localhost" in o.lower() or "127.0.0.1" in o) and o.strip()
+                ]
+                if localhost_origins:
+                    raise ValueError(
+                        f"❌ SECURITY VIOLATION: ALLOWED_ORIGINS contains localhost in production: {localhost_origins}. "
+                        "Use only HTTPS URLs (e.g., https://your-frontend.azurestaticapps.net). "
+                        "Update ALLOWED_ORIGINS in Azure App Settings."
+                    )
+            
+            # Validate debug mode is disabled
+            if self.debug:
+                raise ValueError(
+                    "❌ SECURITY VIOLATION: DEBUG=True in production! "
+                    "This exposes full Python stack traces in HTTP error responses. "
+                    "Set DEBUG=false in Azure App Settings."
+                )
+            
+            # Validate hot-reload is disabled
+            if self.api_reload:
+                raise ValueError(
+                    "❌ SECURITY VIOLATION: API_RELOAD=True in production! "
+                    "Hot-reload should only be enabled in development. "
+                    "Set API_RELOAD=false in Azure App Settings."
+                )
+        
+        return self
+
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",")]
+        if not self.allowed_origins:
+            logger.warning(
+                "⚠️  ALLOWED_ORIGINS is empty! CORS is disabled. "
+                "Set ALLOWED_ORIGINS via environment variable (e.g., https://your-frontend.azurestaticapps.net)"
+            )
+            return []
+        
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
     def get_excel_files_config(self) -> Dict[str, ExcelFileConfig]:
         """Provides the exact file names for the 3 core SharePoint Excel files."""

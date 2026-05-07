@@ -182,3 +182,7 @@ export function startScheduler(startTime) {
 export function stopSchedulerApi() {
   return requestJson(`${API_BASE}/scheduler/stop`, "POST");
 }
+
+export function checkAdminStatus() {
+  return request(`${API_BASE}/scheduler/check-admin-status`);
+}
