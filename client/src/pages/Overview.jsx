@@ -176,22 +176,22 @@ const EXTENDED_ONLY_COLUMNS = [
 
 export default function Overview() {
   const { currentDateParam, currentDateLabel, defaultFilterStart } =
-    useMemo(() => {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return {
-        currentDateParam: `${year}-${month}-${day}`,
-        currentDateLabel: d.toLocaleDateString(DATE_LOCALE, {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
-        defaultFilterStart: `${year}-${month}-01`,
-      };
-    }, []);
+  useMemo(() => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);   // ← shift to yesterday
+    yesterday.setHours(0, 0, 0, 0);
+    const year = yesterday.getFullYear();
+    const month = String(yesterday.getMonth() + 1).padStart(2, "0");
+    const day = String(yesterday.getDate()).padStart(2, "0");
+    return {
+      currentDateParam: `${year}-${month}-${day}`,
+      currentDateLabel: yesterday.toLocaleDateString(DATE_LOCALE, {
+        year: "numeric", month: "long", day: "numeric",
+      }),
+      defaultFilterStart: `${year}-${month}-01`,
+    };
+  }, []);
 
   const {
     data: kpis,

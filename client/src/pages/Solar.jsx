@@ -182,7 +182,9 @@ export default function Solar({
         return key >= propStartDate && key <= propEndDate;
       });
     } else {
-      const todayKey = getLocalDateKey(new Date());
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const todayKey = getLocalDateKey(yesterday);  
       const rowsWithKey = sourceRows.map((row) => ({
         row,
         dateKey: normalizeRowDateKey(row[COL.DATE]),
