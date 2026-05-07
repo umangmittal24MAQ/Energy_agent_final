@@ -619,8 +619,21 @@ export default function Overview() {
         </div>
       )}
 
+      {kpis?.is_fallback && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <span className="font-medium">Note:</span> Today's data is not yet available. Showing data from {kpis?.data_date ? formatLongDate(kpis.data_date) : 'previous day'}.
+        </div>
+      )}
+
       <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
-        The Key Metrics shown below are of {currentDateLabel}
+        {kpis?.data_date ? (
+          <>
+            The Key Metrics shown below are of <span className="font-medium">{formatLongDate(kpis.data_date)}</span>
+            {kpis?.is_fallback && " (previous day data)"}
+          </>
+        ) : (
+          <>The Key Metrics shown below are of {currentDateLabel}</>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -636,6 +649,7 @@ export default function Overview() {
               accent="text-blue-600"
               iconBg="bg-blue-50"
               delay={0}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
             <KpiCard
               label="Grid Units Consumed"
@@ -645,6 +659,7 @@ export default function Overview() {
               accent="text-slate-700"
               iconBg="bg-slate-100"
               delay={60}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
             <KpiCard
               label="Solar Units Consumed"
@@ -654,6 +669,7 @@ export default function Overview() {
               accent="text-amber-600"
               iconBg="bg-amber-50"
               delay={120}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
             <KpiCard
               label="Total Cost Incurred"
@@ -663,6 +679,7 @@ export default function Overview() {
               accent="text-slate-700"
               iconBg="bg-slate-100"
               delay={180}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
             <KpiCard
               label="Solar Cost Savings"
@@ -672,6 +689,7 @@ export default function Overview() {
               accent="text-emerald-600"
               iconBg="bg-emerald-50"
               delay={240}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
             <KpiCard
               label="Diesel Consumed"
@@ -681,6 +699,7 @@ export default function Overview() {
               accent="text-red-600"
               iconBg="bg-red-50"
               delay={300}
+              dateLabel={kpis?.data_date ? `Data from ${formatLongDate(kpis.data_date)}` : undefined}
             />
           </>
         )}

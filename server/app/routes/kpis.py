@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, Depends
 from typing import Optional, Dict, Any
 import pandas as pd
 import logging
+from datetime import datetime, timedelta
 from app.services import data_service
 from app.routes.auth import get_current_user
 
@@ -47,12 +48,39 @@ async def get_dashboard_kpis(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
 ):
-    """Calculates top-level dashboard KPIs from the unified master dataset."""
+    """
+    Calculates top-level dashboard KPIs from the unified master dataset.
+    If data for the requested date is empty, automatically falls back to the previous day.
+    """
+    # Try to load data for the requested date
     result = data_service.load_unified_data(start_date, end_date)
     df = pd.DataFrame(result["data"])
-
+    
+    effective_date = start_date
+    
+    # If no data found and a specific date was requested, try the previous day
+    if df.empty and start_date:
+        try:
+            req_date = datetime.strptime(start_date, "%Y-%m-%d")
+            prev_date = req_date - timedelta(days=1)
+            prev_date_str = prev_date.strftime("%Y-%m-%d")
+            
+            result = data_service.load_unified_data(prev_date_str, prev_date_str)
+            df = pd.DataFrame(result["data"])
+            effective_date = prev_date_str
+            
+            logger.info(f"No data found for {start_date}, using {prev_date_str} instead")
+        except Exception as e:
+            logger.warning(f"Failed to fallback to previous day: {e}")
+    
     if df.empty:
-        return {"total_grid_kwh": 0, "total_solar_kwh": 0, "solar_savings_inr": 0}
+        return {
+            "total_grid_kwh": 0,
+            "total_solar_kwh": 0,
+            "solar_savings_inr": 0,
+            "data_date": effective_date,
+            "is_fallback": effective_date != start_date if start_date else False
+        }
 
     return {
         "total_grid_kwh": _sum_col(df, "Grid Units Consumed (KWh)"),
@@ -61,4 +89,6 @@ async def get_dashboard_kpis(
         "total_cost_inr": _sum_col(df, "Total Units Consumed in INR"),
         "solar_savings_inr": _sum_col(df, "Energy Saving in INR"),
         "diesel_consumed_liters": _sum_col_with_text_numeric(df, "Diesel consumed"),
+        "data_date": effective_date,
+        "is_fallback": effective_date != start_date if start_date else False
     }
