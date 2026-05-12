@@ -19,6 +19,7 @@ export default function KpiCard({
     accent = "text-slate-900",
     iconBg = "bg-slate-100",
     delay = 0,
+    dateLabel,
 }) {
     return (
         <div
@@ -32,7 +33,7 @@ export default function KpiCard({
                     <Icon className={`w-5 h-5 ${accent}`} strokeWidth={1.8} />
                 </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-slate-500 tracking-wide">
                     {label}
                 </p>
@@ -44,6 +45,11 @@ export default function KpiCard({
                         </span>
                     )}
                 </p>
+                {dateLabel && (
+                    <p className="text-xs text-slate-400 mt-1.5 font-normal">
+                        {dateLabel}
+                    </p>
+                )}
             </div>
         </div>
     );
