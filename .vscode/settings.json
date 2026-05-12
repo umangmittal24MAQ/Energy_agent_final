@@ -1,4 +1,6 @@
 {
     "appService.showBuildDuringDeployPrompt": false,
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "appService.defaultWebAppToDeploy": "/subscriptions/43d1ee93-4dad-4b09-953b-a891e8439178/resourceGroups/energyconsumptionreportingagent/providers/Microsoft.Web/sites/energyconsumptionreportingagent-appfe",
+    "appService.deploySubpath": "client\\dist"
 }

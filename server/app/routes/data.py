@@ -51,3 +51,16 @@ async def get_integration_status():
         },
         "architecture": "Unified-Excel-Graph-API",
     }
+
+@router.get("/live/inverter-uptime")
+async def get_live_inverter_uptime():
+    """
+    On-demand inverter uptime/downtime for today.
+    Reads directly from UnifiedSolarData — no tracker cache.
+    Called when the frontend Solar tab is opened.
+    """
+    from app.services.inverter_monitor import get_today_uptime_from_sheet
+    result = get_today_uptime_from_sheet()
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return result

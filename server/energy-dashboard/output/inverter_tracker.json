@@ -1,0 +1,24 @@
+{
+    "2026-05-08": {
+        "Inverter1": {
+            "uptime_mins": 390,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 30,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 390,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 390,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 390,
+            "downtime_mins": 0
+        }
+    }
+}

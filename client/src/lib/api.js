@@ -21,8 +21,6 @@ function toOrigin(value, fallbackProtocol = "https") {
 export const BACKEND_ORIGIN = (() => {
   const explicitBase = import.meta.env.VITE_API_BASE_URL;
 
-  // In local development, keep requests same-origin so Vite proxy can forward
-  // to the backend and browser session cookies remain stable.
   if (isLocalDevHost) {
     if (explicitBase) {
       try {
@@ -46,7 +44,6 @@ export const BACKEND_ORIGIN = (() => {
     }
   }
 
-  // In local UI development, default to local backend unless an explicit base URL is set.
   if (isLocalDevHost) {
     return DEFAULT_LOCAL_API_ORIGIN;
   }
@@ -65,7 +62,6 @@ export const BACKEND_ORIGIN = (() => {
 const API_BASE = (() => {
   const explicitBase = import.meta.env.VITE_API_BASE_URL;
 
-  // Local dev should use Vite proxy instead of absolute backend origin.
   if (isLocalDevHost) return "/api";
 
   if (explicitBase) return explicitBase.replace(/\/+$/, "");
@@ -98,6 +94,10 @@ async function authFetch(url, options = {}) {
       console.warn("Session expired or invalid. Redirecting to login...");
       window.location.reload();
     }
+
+    // Throw immediately — prevents callers from trying to parse the HTML 401
+    // page as JSON (which causes "Unexpected token '<'" SyntaxError)
+    throw new Error("Unauthorized");
   }
 
   return response;
@@ -108,7 +108,7 @@ async function request(path, params = {}) {
   const query = new URLSearchParams(entries).toString();
   const url = query ? `${path}?${query}` : path;
 
-  const res = await authFetch(url); // Use authFetch
+  const res = await authFetch(url);
   if (!res.ok) {
     throw new Error(`Request failed: ${res.status}`);
   }
@@ -117,7 +117,6 @@ async function request(path, params = {}) {
 
 async function requestJson(path, method = "POST", body = null) {
   const res = await authFetch(path, {
-    // Use authFetch
     method,
     body: body == null ? undefined : JSON.stringify(body),
   });
@@ -129,7 +128,6 @@ async function requestJson(path, method = "POST", body = null) {
   return res.json();
 }
 
-// --- Your existing exported functions remain exactly the same! ---
 export function fetchKpis({ startDate, endDate } = {}) {
   return request(`${API_BASE}/kpis/dashboard`, {
     start_date: startDate,
@@ -185,4 +183,7 @@ export function stopSchedulerApi() {
 
 export function checkAdminStatus() {
   return request(`${API_BASE}/scheduler/check-admin-status`);
+}
+export function fetchInverterUptime() {
+  return request(`${API_BASE}/data/live/inverter-uptime`);
 }

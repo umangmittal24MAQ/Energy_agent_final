@@ -24,7 +24,7 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Formatting Helpers (From your strict specifications)
+# Formatting Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 def _num(value: Any, default: float = 0.0) -> float:
     if value is None or value == "": return default
@@ -88,28 +88,22 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
     """
     Append one send-history record to scheduler_log.json (JSON list format).
     This file is exclusively owned by email_service and always stays a list.
- 
-    FIX C4: scheduler_service now writes its tracker dict to a SEPARATE file
-    (scheduler_tracker.json), so there is no longer a format collision between
-    the two services writing to the same file.
     """
     try:
         from app.services.scheduler_service import SCHEDULER_LOG_FILE
- 
+
         SCHEDULER_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         history: list[Dict[str, Any]] = []
- 
+
         if SCHEDULER_LOG_FILE.exists():
             try:
                 with open(SCHEDULER_LOG_FILE, "r", encoding="utf-8") as f:
                     payload = json.load(f)
                 if isinstance(payload, list):
                     history = payload
-                # If it's a dict (leftover from old code), discard it and start fresh.
-                # After this fix, that can only happen during one-time migration.
             except Exception:
                 history = []
- 
+
         history.append(entry)
         MAX_HISTORY = 500
         history = history[-MAX_HISTORY:]
@@ -122,10 +116,6 @@ def _append_scheduler_send_history(entry: Dict[str, Any]) -> None:
 def send_admin_alert(subject: str, error_message: str) -> None:
     """
     Send a plain-text fallback alert to the admin when the daily report fails.
- 
-    FIX S4: No longer has a hardcoded personal email as a fallback default.
-    Set ADMIN_ALERT_EMAIL in your environment / Azure App Settings.
-    If not set, the alert is skipped and a warning is logged.
     """
     admin_email = os.getenv("ADMIN_ALERT_EMAIL")
     if not admin_email:
@@ -134,17 +124,17 @@ def send_admin_alert(subject: str, error_message: str) -> None:
             f"Skipping admin alert for: {subject}"
         )
         return
- 
+
     try:
         smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
         smtp_port = int(os.getenv("SMTP_PORT", 587))
         email_from = os.getenv("EMAIL_FROM", "")
         sender_password = os.getenv("EMAIL_PASSWORD", "")
- 
+
         if not email_from or not sender_password:
             logger.error("send_admin_alert: EMAIL_FROM or EMAIL_PASSWORD not set. Cannot send alert.")
             return
- 
+
         msg = MIMEText(
             f"Energy Dashboard Alert\n\n"
             f"Subject: {subject}\n"
@@ -155,108 +145,16 @@ def send_admin_alert(subject: str, error_message: str) -> None:
         msg["From"] = email_from
         msg["To"] = admin_email
         msg["Subject"] = f"[ALERT] Energy Dashboard: {subject}"
- 
+
         with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(email_from, sender_password)
             server.sendmail(email_from, [admin_email], msg.as_string())
- 
+
         logger.info(f"Admin alert sent to {admin_email}: {subject}")
     except Exception as alert_exc:
         logger.error(f"Failed to send admin alert: {alert_exc}")
  
-def _normalize_col_name(name: Any) -> str:
-    return re.sub(r"[^a-z0-9]", "", str(name).lower())
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> Optional[str]:
-    wanted = {_normalize_col_name(c) for c in candidates}
-    for col in df.columns:
-        if _normalize_col_name(col) in wanted:
-            return col
-    return None
-
-
-def _compute_yesterday_generation_for_email(sp_service: Any, for_date: Optional[Any] = None) -> Optional[float]:
-    """
-    Compare two UnifiedSolarData values and return the higher one:
-    1) for_date's "Yesterday Gen"
-    2) (for_date - 1)'s final "Day Generation (kWh)"
-
-    When for_date is None, defaults to IST today.
-    """
-    try:
-        unified_df = sp_service.fetch_sheet_data("unified_solar")
-        if unified_df is None or unified_df.empty:
-            logger.warning("UnifiedSolarData is empty; cannot compute Yesterday Generation override.")
-            return None
-
-        df = unified_df.copy()
-        date_col = _find_column(df, ["Date"])
-        if not date_col:
-            logger.warning("Date column not found in UnifiedSolarData; cannot compute Yesterday Generation override.")
-            return None
-
-        ygen_col = _find_column(
-            df,
-            [
-                "Yesterday Gen",
-                "Yesterday Generation (kWh)",
-                "Yesterday Generation",
-                "YesterdayGen",
-            ],
-        )
-        daygen_col = _find_column(
-            df,
-            ["Day Generation (kWh)", "DayGeneration", "Day Generation"],
-        )
-        time_col = _find_column(df, ["Time"])
-
-        parsed_date = pd.to_datetime(df[date_col], errors="coerce",format="mixed").dt.date
-        parsed_time = pd.to_datetime(df[time_col], errors="coerce",format="mixed") if time_col else pd.Series(pd.NaT, index=df.index)
-
-        if for_date is not None:
-            ist_today = pd.to_datetime(for_date).date()
-        else:
-            ist_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
-        ist_yesterday = ist_today - timedelta(days=1)
-
-        val_today_ygen = 0.0
-        if ygen_col:
-            today_rows = df[parsed_date == ist_today].copy()
-            if not today_rows.empty:
-                today_rows["_t"] = parsed_time.loc[today_rows.index]
-                today_rows = today_rows.sort_values("_t")
-                val_today_ygen = _num(today_rows.iloc[-1].get(ygen_col), 0.0)
-
-        val_yday_final_daygen = 0.0
-        if daygen_col:
-            yday_rows = df[parsed_date == ist_yesterday].copy()
-            if not yday_rows.empty:
-                yday_rows["_t"] = parsed_time.loc[yday_rows.index]
-                yday_rows = yday_rows.sort_values("_t")
-                val_yday_final_daygen = _num(yday_rows.iloc[-1].get(daygen_col), 0.0)
-
-        selected = max(val_today_ygen, val_yday_final_daygen)
-        logger.info(
-            f"Yesterday Generation compare: today[YGen]={val_today_ygen}, "
-            f"yesterday[final DayGen]={val_yday_final_daygen}, selected={selected}"
-        )
-        return round(selected, 2)
-    except Exception as e:
-        logger.warning(f"Failed computing Yesterday Generation override: {e}")
-        return None
-
-
-def _coerce_for_column(df: pd.DataFrame, column: str, value: float) -> Any:
-    """Return a dtype-compatible value for dataframe column assignment."""
-    try:
-        dtype = df[column].dtype
-        if pd.api.types.is_string_dtype(dtype):
-            return str(value)
-        return float(value)
-    except Exception:
-        return str(value)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Core HTML Generator
@@ -312,84 +210,30 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             )
             return {"status": "Failed", "notes": "Master data is empty"}
 
-        today = datetime.now(ZoneInfo("Asia/Kolkata"))
-        report_date_title = today.strftime("%Y-%m-%d")
+        # --- 1. GET THE LATEST 30 ROWS ---
+        if "Date" in master_df.columns:
+            master_df["_parsed_date"] = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
+            master_df = master_df.dropna(subset=["_parsed_date"])
+            latest_df = master_df.sort_values(by="_parsed_date", ascending=False).head(30).drop(columns=["_parsed_date"]).copy()
+        else:
+            latest_df = master_df.tail(30).copy()
 
-        # --- 1. DETERMINE SINGLE REPORT DATE ---
+        # --- 2. STRICTLY USE THE LATEST DATE FROM THE DATA ---
+        if not latest_df.empty and "Date" in latest_df.columns:
+            report_date_title = str(latest_df.iloc[0]["Date"])
+        else:
+            report_date_title = "Unknown Date"
+
+        # Allow manual override if triggered manually with a specific date
         if manual_date:
             report_date_title = manual_date
-        elif "Date" in master_df.columns:
-            parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
-            today_mask = parsed_dates.dt.date == today.date()
-            if today_mask.any():
-                today_rows_master = master_df.loc[today_mask]
-                if not today_rows_master.empty:
-                    report_date_title = str(today_rows_master.iloc[-1].get("Date", report_date_title))
-            elif today.weekday() == 0:
-                sunday_date = (today - timedelta(days=1)).date()
-                sunday_mask = parsed_dates.dt.date == sunday_date
-                if sunday_mask.any():
-                    sunday_rows = master_df.loc[sunday_mask]
-                    if not sunday_rows.empty:
-                        report_date_title = str(sunday_rows.iloc[-1].get("Date", report_date_title))
-                elif not master_df.empty:
-                    report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-            elif not master_df.empty:
-                report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
-        elif not master_df.empty:
-            report_date_title = str(master_df.iloc[-1].get("Date", report_date_title))
 
-        # --- 1.5 OVERRIDE YESTERDAY GENERATION FOR EMAIL CONTENT ---
-        # Determine which dates the report covers.
-        report_dates = [today.date()]
-        if today.weekday() == 0:
-            # Monday: also cover Sunday (no email was sent on Sunday).
-            report_dates = [(today - timedelta(days=1)).date(), today.date()]
-
-        if "Yesterday Generation (kWh)" not in master_df.columns:
-            master_df["Yesterday Generation (kWh)"] = ""
-
-        solar_units_source_col = _find_column(
-            master_df,
-            [
-                "Solar Units Consumed(KWh)",
-                "Solar Units Consumed (KWh)",
-                "Solar Units Consumed (kWh)",
-            ],
-        )
-        if not solar_units_source_col:
-            solar_units_source_col = "Solar Units Consumed(KWh)"
-            master_df[solar_units_source_col] = ""
-
-        parsed_master_dates = pd.to_datetime(master_df["Date"], errors="coerce",format="mixed").dt.date
-        updated_any = False
-        for r_date in report_dates:
-            selected_gen = _compute_yesterday_generation_for_email(sp_service, for_date=r_date)
-            if selected_gen is None:
-                continue
-            mask = parsed_master_dates == r_date
-            if mask.any():
-                ygen_value = _coerce_for_column(master_df, "Yesterday Generation (kWh)", selected_gen)
-                solar_value = _coerce_for_column(master_df, solar_units_source_col, selected_gen)
-                master_df.loc[mask, "Yesterday Generation (kWh)"] = ygen_value
-                master_df.loc[mask, solar_units_source_col] = solar_value
-                updated_any = True
-
-        # Safety fallback: if no report-date row was found, update the latest row.
-        if not updated_any and not master_df.empty:
-            fallback_gen = _compute_yesterday_generation_for_email(sp_service)
-            if fallback_gen is not None:
-                ygen_value = _coerce_for_column(master_df, "Yesterday Generation (kWh)", fallback_gen)
-                solar_value = _coerce_for_column(master_df, solar_units_source_col, fallback_gen)
-                master_df.loc[master_df.index[-1], "Yesterday Generation (kWh)"] = ygen_value
-                master_df.loc[master_df.index[-1], solar_units_source_col] = solar_value
-
-        # --- 2. INJECT WARNING IF DATA IS MISSING ---
+        # --- 3. INJECT WARNING IF DATA IS MISSING ---
         if is_missing_data:
             warning_msg = (
                 "<div style='background-color:#ffebee; padding:15px; border-left:4px solid #f44336; color:#d32f2f; margin:18px 24px 0 24px; font-size:14px;'>"
                 "<b>⚠️ ACTION REQUIRED:</b> The operator did not log today's data by the 10:30 AM deadline. "
-                "The report below only contains data up to yesterday."
+                "The report below only contains data up to the latest available date."
                 "</div>"
             )
             subject_prefix = "⚠️ ACTION REQUIRED: Missing Data - "
@@ -397,49 +241,26 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             warning_msg = ""
             subject_prefix = ""
 
-        # --- 3. INJECT HTML FOR THE SELECTED DATE ---
+        # --- 4. INJECT HTML USING LATEST 30 ROWS ---
         try:
-            body_html = _build_strict_email_html(master_df, report_date_title, custom_message=warning_msg)
+            body_html = _build_strict_email_html(latest_df, report_date_title, custom_message=warning_msg)
         except Exception as e:
             logger.error(f"HTML generation failed: {e}")
             body_html = f"<p>Report generated for {report_date_title}, but HTML formatting failed.</p>"
 
-        # --- 4. ATTACHMENT AND EMAIL SENDING ---
+        # --- 5. ATTACHMENT AND EMAIL SENDING USING LATEST 30 ROWS ---
         try:
-            attachment_df = master_df
-            if "Date" in master_df.columns:
-                target_date = pd.to_datetime(report_date_title, errors="coerce", format="mixed")
-                parsed_dates = pd.to_datetime(master_df["Date"], errors="coerce", format="mixed")
-                if pd.notna(target_date):
-                    cutoff = target_date - pd.Timedelta(days=30)
-                    attachment_df = master_df[parsed_dates.dt.date >= cutoff.date()]
-
-            # Only include the columns needed in the attachment
             ATTACHMENT_COLUMNS = [
-                "Date",
-                "Day",
-                "Time",
-                "Ambient Temperature °C",
-                "Grid Units Consumed (KWh)",
-                "Solar Units Consumed(KWh)",
-                "Total Units Consumed (KWh)",
-                "Total Units Consumed in INR",
-                "Energy Saving in INR",
-                "Number of Panels Cleaned",
-                "Diesel consumed",
-                "Water treated through STP",
-                "Water treated through WTP",
-                "Issues",
+                "Date", "Day", "Time", "Ambient Temperature °C", "Grid Units Consumed (KWh)",
+                "Solar Units Consumed(KWh)", "Total Units Consumed (KWh)", "Total Units Consumed in INR",
+                "Energy Saving in INR", "Number of Panels Cleaned", "Diesel consumed",
+                "Water treated through STP", "Water treated through WTP", "Issues",
             ]
-            # Only keep columns that actually exist in master_df (safe against column name changes)
-            cols_present = [c for c in ATTACHMENT_COLUMNS if c in attachment_df.columns]
-            missing = [c for c in ATTACHMENT_COLUMNS if c not in attachment_df.columns]
-            if missing:
-                logger.warning(f"[ATTACHMENT] These expected columns were not found in master_df: {missing}")
-            attachment_df = attachment_df[cols_present]
-
+            cols_present = [c for c in ATTACHMENT_COLUMNS if c in latest_df.columns]
+            attachment_df = latest_df[cols_present]
 
             attachment_bytes = _generate_excel_attachment(attachment_df)
+            
             parsed_attachment_date = pd.to_datetime(report_date_title, errors="coerce", format="mixed")
             attachment_suffix = (
                 parsed_attachment_date.strftime("%Y%m%d")
@@ -464,13 +285,12 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
         cc_list = [e.strip() for e in cc_emails_str.split(',') if e.strip()]
         all_recipients = to_list + cc_list
         
-        # --- 1. Format the Subject Date to current day (or manual override) ---
+        # Format the subject date purely based on the fetched data date
         try:
             subject_date_str = pd.to_datetime(report_date_title, format="mixed").strftime("%B %d, %Y").replace(" 0", " ")
         except Exception:
             subject_date_str = report_date_title
 
-        # --- 2. Inject Date and Clean Encoding ---
         raw_subject = sched_config.get("subject", "Daily Energy Report - Noida Campus - {date}")
         base_subject = raw_subject.replace("{date}", subject_date_str).replace("â€”", "-").replace("—", "-")
         
@@ -522,41 +342,33 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
                 "status": "Failed",
                 "kind": "daily_report",
                 "trigger_source": trigger_source,
-                "subject": subject,
-                "recipients": ", ".join(all_recipients),
-                "attachment": attachment_name,
+                "subject": subject if 'subject' in locals() else "Daily Energy Report",
+                "recipients": ", ".join(all_recipients) if 'all_recipients' in locals() and all_recipients else "",
+                "attachment": attachment_name if 'attachment_name' in locals() else None,
                 "notes": str(e),
             }
         )
         return {"status": "Failed", "error": str(e)}
 
 def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message: str = "") -> str:
-    """Builds the exact custom HTML table and layout requested by the user."""
-    
-    # --- Format the Report Date to 'Month DD, YYYY' ---
     try:
         formatted_date = pd.to_datetime(report_date).strftime("%B %d, %Y").replace(" 0", " ")
     except Exception:
         formatted_date = report_date
 
-    # 1. Clean and Sort the Data
-    df = df.copy()
-    if "Date" in df.columns:
-        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce",format="mixed")
-        df = df.dropna(subset=["_parsed_date"])
-        df = df.sort_values(by="_parsed_date", ascending=False).head(30)
-    else:
-        df = df.tail(30)
-
-    # 2. Map Columns to Exact Specifications
     display_dict = []
     for _, row in df.iterrows():
         safe_row = row.fillna("")
         
-        true_date = row["_parsed_date"]
-        display_date = true_date.strftime("%d-%b-%Y")
-        master_day = str(safe_row.get("Day", "")).strip()
-        display_day = master_day if master_day else true_date.strftime("%A")
+        raw_date = safe_row.get("Date", "")
+        try:
+            true_date = pd.to_datetime(raw_date, format="mixed")
+            display_date = true_date.strftime("%d-%b-%Y")
+            master_day = str(safe_row.get("Day", "")).strip()
+            display_day = master_day if master_day else true_date.strftime("%A")
+        except:
+            display_date = str(raw_date)
+            display_day = str(safe_row.get("Day", ""))
 
         raw_time = safe_row.get("Time", "")
         try:
@@ -584,7 +396,6 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
 
     display_df = pd.DataFrame(display_dict)
 
-    # 3. Format the HTML Table
     right_aligned_columns = {
         "Ambient Temperature (°C)", "Grid Units Consumed (kWh)", "Solar Units Consumed (kWh)",
         "Total Units Consumed (kWh)", "Total Cost (INR)", "Solar Cost Savings (INR)",
@@ -593,7 +404,7 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
     }
     decimals_by_column = {
         "Grid Units Consumed (kWh)": 0, "Solar Units Consumed (kWh)": 0, "Total Units Consumed (kWh)": 0,
-        "Total Cost (INR)": 2, "Solar Cost Savings (INR)": 2, "Panels Cleaned": 0,
+        "Total Cost (INR)": 0, "Solar Cost Savings (INR)": 0, "Panels Cleaned": 0,
         "Diesel Consumed (Litres)": 0, "Water Treated through STP (kilo Litres)": 0,
         "Water Treated through WTP (kilo Litres)": 0,
     }
@@ -649,7 +460,6 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
 
     custom_message_html = f'<tr><td style="padding:0;">{custom_message}</td></tr>' if custom_message else ''
 
-    # 4. Wrap in the Custom Layout (Using the newly formatted_date)
     return f"""
     <html>
         <body style="margin:0; padding:0; background:#f2f3f5; font-family:Segoe UI, Helvetica Neue, Arial, sans-serif; font-size:13px;">
@@ -684,19 +494,10 @@ def _build_strict_email_html(df: pd.DataFrame, report_date: str, custom_message:
     """
 
 def _generate_excel_attachment(df: pd.DataFrame) -> bytes:
-    """Generates an in-memory Excel file, safely handling mixed date types."""
+    """Generates an in-memory Excel file, directly from the passed DataFrame."""
     output_buffer = io.BytesIO()
-    if "Date" in df.columns:
-        df = df.copy()
-        df["_parsed_date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.dropna(subset=["_parsed_date"])
-        df_sorted = df.sort_values(by="_parsed_date", ascending=False).drop(columns=["_parsed_date"]).head(30)
-    else:
-        df_sorted = df.tail(30)
-        
     with pd.ExcelWriter(output_buffer, engine='openpyxl') as writer:
-        df_sorted.to_excel(writer, sheet_name='Energy_Report', index=False)
-        
+        df.to_excel(writer, sheet_name='Energy_Report', index=False)
     output_buffer.seek(0)
     return output_buffer.read()
 

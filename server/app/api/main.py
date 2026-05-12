@@ -20,6 +20,9 @@ from app.core.logger import setup_logging, get_logger
 from app.core.rate_limit import limiter
 from app.services.scheduler_service import initialize_scheduler_from_config, stop_scheduler
 
+# with the other include_router calls
+
+
 
 logger = get_logger(__name__)
 
@@ -128,6 +131,8 @@ def create_app() -> FastAPI:
     @app.get("/")
     async def root_health_check():
         return {"status": "running", "message": "Energy Dashboard API"}
+    
+    
 
     @app.get("/health")
     async def health_check():
@@ -167,7 +172,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     try:
-        from app.routes import data, kpis, export, scheduler, mail, auth
+        from app.routes import data, kpis, export, scheduler, mail, auth, people
 
         app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
         app.include_router(data.router, prefix="/api")
@@ -175,6 +180,8 @@ def create_app() -> FastAPI:
         app.include_router(mail.router, prefix="/api")
         app.include_router(export.router, prefix="/api")
         app.include_router(scheduler.router, prefix="/api")
+        app.include_router(people.router, prefix="/api")
+        
         logger.info("All routers loaded successfully")
     except ImportError as e:
         logger.error(f"Failed to import routers: {e}", exc_info=True)

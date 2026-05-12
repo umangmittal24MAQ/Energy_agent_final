@@ -4,7 +4,7 @@ import {
   TableSkeleton,
 } from "../components/Skeleton";
 import { useState, useMemo } from "react";
-import { useUnifiedData } from "../lib/hooks";
+import { useUnifiedData, useInverterUptime } from "../lib/hooks";
 import {
   formatLongDate,
   formatNumber,
@@ -20,17 +20,8 @@ import {
   INVERTER_COUNT,
 } from "../lib/constants";
 import KpiCard from "../components/KpiCard";
-import {
-  Sun,
-  PiggyBank,
-  TrendingUp,
-  AlertCircle,
-  Calendar,
-  Zap,
-  ArrowUpDown,
-  Activity,
-  Clock,
-} from "lucide-react";
+import { Sun, PiggyBank, TrendingUp, AlertCircle, Calendar, Zap, ArrowUpDown, Clock } from "lucide-react";
+
 import {
   AreaChart,
   Area,
@@ -55,94 +46,7 @@ function parseNumeric(value) {
   return match ? Number(match[0]) : null;
 }
 
-function normalizeInverterStatus(rawStatus) {
-  const text = String(rawStatus || "")
-    .trim()
-    .toLowerCase();
-  if (!text) return "OFFLINE";
-  if (
-    text.includes("fault") ||
-    text.includes("error") ||
-    text.includes("trip")
-  ) {
-    return "FAULT";
-  }
-  if (
-    text === "on" ||
-    text.includes(" on") ||
-    text.includes("active") ||
-    text.includes("online") ||
-    text.includes("running") ||
-    text.includes("ok")
-  ) {
-    return "ACTIVE";
-  }
-  if (
-    text === "off" ||
-    text.includes("offline") ||
-    text.includes("down") ||
-    text.includes("stop")
-  ) {
-    return "OFFLINE";
-  }
-  return "OFFLINE";
-}
 
-function resolveLiveStatus(statusValues) {
-  const normalized = (statusValues || [])
-    .map((value) => normalizeInverterStatus(value))
-    .filter(Boolean);
-
-  if (normalized.includes("FAULT")) return "FAULT";
-  if (normalized.includes("ACTIVE")) return "ACTIVE";
-  return "OFFLINE";
-}
-
-function formatGenerationValue(value) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${value.toFixed(3)} kWh`;
-}
-
-function findFirstValue(row, keys) {
-  for (const key of keys) {
-    if (row && row[key] != null && String(row[key]).trim() !== "") {
-      return row[key];
-    }
-  }
-  return null;
-}
-
-function hasMeaningfulLiveValue(value) {
-  if (value == null) return false;
-  const text = String(value).trim();
-  if (!text) return false;
-  if (text.toLowerCase() === "nan") return false;
-  return true;
-}
-
-function rowHasLiveInverterData(row) {
-  if (!row) return false;
-  for (let i = 1; i <= INVERTER_COUNT; i += 1) {
-    const candidates = [
-      `SMB${i}`,
-      `SMB ${i}`,
-      `SMB_${i}`,
-      `Inverter${i}`,
-      `Inverter ${i}`,
-      `Inverter_${i}`,
-      `SMB${i}_status`,
-      `SMB${i} status`,
-      `SMB${i} Status`,
-      `Inverter${i}_status`,
-      `Inverter${i} status`,
-      `Inverter${i} Status`,
-    ];
-    if (candidates.some((key) => hasMeaningfulLiveValue(row[key]))) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export default function Solar({
   embedded = false,
@@ -150,10 +54,16 @@ export default function Solar({
   endDate: propEndDate,
 }) {
   const {
-    data: unified,
-    isLoading: dataLoading,
-    error: dataError,
-  } = useUnifiedData();
+  data: unified,
+  isLoading: dataLoading,
+  error: dataError,
+} = useUnifiedData();
+
+  const {
+  data: uptimeData,
+  isLoading: uptimeLoading,
+  error: uptimeError,
+} = useInverterUptime();
 
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
@@ -200,6 +110,8 @@ export default function Solar({
         .sort()
         .at(-1);
 
+      
+
       const fallbackRows = rowsWithKey
         .filter((item) => item.dateKey === latestDateKey)
         .map((item) => item.row);
@@ -239,7 +151,7 @@ export default function Solar({
     () =>
       (unified?.data || []).map((row) => ({
         date: row[COL.DATE],
-        solar: row[COL.SOLAR_UNITS] ?? 0,
+        solar: row[COL.SOLAR_UNITS] ?? row[COL.DAY_GENERATION] ?? 0,
         total: row[COL.TOTAL_UNITS] ?? 0,
         savings: row[COL.ENERGY_SAVINGS] ?? 0,
       })),
@@ -260,102 +172,6 @@ export default function Solar({
     [chartData],
   );
 
-  const latestSolarRow = useMemo(() => {
-    if (!sourceRows.length) return null;
-    const sorted = [...sourceRows].sort((a, b) => {
-      const aKey = `${normalizeRowDateKey(a[COL.DATE]) || ""}-${String(a[COL.TIME] || "")}`;
-      const bKey = `${normalizeRowDateKey(b[COL.DATE]) || ""}-${String(b[COL.TIME] || "")}`;
-      return aKey.localeCompare(bKey);
-    });
-
-    for (let i = sorted.length - 1; i >= 0; i -= 1) {
-      if (rowHasLiveInverterData(sorted[i])) {
-        return sorted[i];
-      }
-    }
-
-    return sorted[sorted.length - 1] || null;
-  }, [sourceRows]);
-
-  const inverterInsights = useMemo(() => {
-    const fallbackRows = Array.from({ length: INVERTER_COUNT }, (_, idx) => ({
-      id: `INV_${idx + 1}`,
-      status: "OFFLINE",
-      unitsGenerated: null,
-      lastUpdated: "—",
-    }));
-
-    if (!latestSolarRow) {
-      return {
-        cards: fallbackRows,
-        rows: fallbackRows,
-        hasPerInverterGeneration: false,
-        aggregateGeneration: null,
-      };
-    }
-
-    const lastUpdatedDate = formatLongDate(latestSolarRow[COL.DATE]);
-    const timeText = String(latestSolarRow[COL.TIME] || "").trim();
-    const lastUpdated =
-      [lastUpdatedDate, timeText].filter(Boolean).join(" ") || "—";
-
-    const rows = Array.from({ length: INVERTER_COUNT }, (_, idx) => {
-      const i = idx + 1;
-      const smbStatusRaw = findFirstValue(latestSolarRow, [
-        `SMB${i}_status`,
-        `SMB${i} status`,
-        `SMB${i} Status`,
-        `SMB ${i}_status`,
-        `SMB ${i} status`,
-        `SMB ${i} Status`,
-      ]);
-
-      const inverterStatusRaw = findFirstValue(latestSolarRow, [
-        `Inverter${i}_status`,
-        `Inverter${i} status`,
-        `Inverter${i} Status`,
-        `INV_${i}_status`,
-      ]);
-
-      const unitsRaw = findFirstValue(latestSolarRow, [
-        `SMB${i}`,
-        `SMB ${i}`,
-        `SMB_${i}`,
-        `Inverter${i}`,
-        `Inverter ${i}`,
-        `Inverter_${i}`,
-        `Inverter${i} Units Generated (kWh)`,
-        `Inverter${i} Day Generation (kWh)`,
-        `INV_${i} Units Generated (kWh)`,
-        `INV_${i}_kwh`,
-        `INV_${i}_day_generation_kwh`,
-      ]);
-
-      const smbStatus = normalizeInverterStatus(smbStatusRaw);
-      const inverterStatus = normalizeInverterStatus(inverterStatusRaw);
-
-      return {
-        id: `INV_${i}`,
-        smbId: `SMB${i}`,
-        status: resolveLiveStatus([smbStatusRaw, inverterStatusRaw]),
-        smbStatus,
-        inverterStatus,
-        unitsGenerated: parseNumeric(unitsRaw),
-        lastUpdated,
-      };
-    });
-
-    const hasPerInverterGeneration = rows.some(
-      (row) => row.unitsGenerated != null && row.unitsGenerated >= 0,
-    );
-
-    return {
-      cards: rows,
-      rows,
-      hasPerInverterGeneration,
-      aggregateGeneration: parseNumeric(latestSolarRow[COL.DAY_GENERATION]),
-    };
-  }, [latestSolarRow]);
 
   const sorted = useMemo(() => {
     const copy = [...chartData];
@@ -385,18 +201,10 @@ export default function Solar({
   const error = dataError;
 
   const TABLE_COLS = [
-    { key: "date", label: "Date", format: formatLongDate },
-    {
-      key: "solar",
-      label: "Solar Units Consumed (KWh)",
-      format: formatNumber,
-    },
-    {
-      key: "savings",
-      label: "Solar Cost Saving (INR)",
-      format: formatNumber,
-    },
-  ];
+  { key: "date", label: "Date", format: formatLongDate },
+  { key: "solar", label: "Solar Units Consumed (KWh)", format: formatNumber },
+  { key: "savings", label: "Solar Cost Saving (INR)", format: formatNumber },
+];
 
   const rootClass = embedded
     ? "space-y-6"
@@ -516,55 +324,64 @@ export default function Solar({
           </section>
         )}
 
-        {/* ADDED: Inverter status cards (live). */}
-        <section className="bg-white rounded-lg border border-slate-200 animate-slide-up">
-          <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-amber-600" />
-            <h2 className="text-sm font-medium text-slate-700">
-              Inverter Status (Live)
-            </h2>
+        {/* ── Today's Inverter Uptime / Downtime ── */}
+<section className="bg-white rounded-lg border border-slate-200 animate-slide-up">
+  <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <Clock className="w-4 h-4 text-amber-600" />
+      <h2 className="text-sm font-medium text-slate-700">
+        Today's Inverter Uptime
+      </h2>
+    </div>
+    {uptimeData?.as_of && (
+      <span className="text-xs text-slate-400">
+        as of {new Date(uptimeData.as_of).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+        {" · "}{uptimeData.rows_processed} readings
+      </span>
+    )}
+  </div>
+
+  {uptimeLoading && (
+    <div className="p-5 text-sm text-slate-400">Loading uptime data...</div>
+  )}
+
+  {uptimeError && (
+    <div className="p-5 flex items-center gap-2 text-sm text-red-600">
+      <AlertCircle className="w-4 h-4 shrink-0" />
+      Failed to load uptime data
+    </div>
+  )}
+
+  {uptimeData && !uptimeLoading && (
+    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {Object.entries(uptimeData.inverters).map(([inv, stats]) => {
+        const hasFault = stats.downtime_mins > 0;
+        return (
+          <div key={inv} className="rounded-lg border border-slate-200 p-3 bg-slate-50/60">
+            <p className="text-xs font-semibold text-slate-500">{inv}</p>
+
+            {/* Uptime bar */}
+            <div className="mt-2 h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${hasFault ? "bg-red-400" : "bg-emerald-400"}`}
+                style={{ width: `${stats.uptime_pct}%` }}
+              />
+            </div>
+
+            <p className={`mt-1.5 text-lg font-bold ${hasFault ? "text-red-600" : "text-emerald-600"}`}>
+              {stats.uptime_pct}%
+            </p>
+
+            <div className="mt-1 space-y-0.5 text-[11px] text-slate-500">
+              <p>↑ Up: {stats.uptime_hrs}h ({stats.uptime_mins}m)</p>
+              <p>↓ Down: {stats.downtime_hrs}h ({stats.downtime_mins}m)</p>
+            </div>
           </div>
-          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {inverterInsights.cards.map((item) => {
-              const badgeClass =
-                item.status === "ACTIVE"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : item.status === "FAULT"
-                    ? "bg-red-50 text-red-700 border-red-200"
-                    : "bg-slate-50 text-slate-600 border-slate-200";
-
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-lg border border-slate-200 p-3 bg-slate-50/60"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-500">
-                      {item.id}
-                    </p>
-                    <p className="text-[10px] font-medium text-slate-400">
-                      {item.smbId}
-                    </p>
-                  </div>
-                  <span
-                    className={`mt-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeClass}`}
-                  >
-                    {item.status}
-                  </span>
-
-                  <p className="mt-2 text-sm font-semibold text-slate-800">
-                    {formatGenerationValue(item.unitsGenerated)}
-                  </p>
-
-                  <div className="mt-2 space-y-1 text-[10px] text-slate-500">
-                    <p>SMB Status: {item.smbStatus}</p>
-                    <p>Inverter Status: {item.inverterStatus}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        );
+      })}
+    </div>
+  )}
+</section>
 
         {dataLoading ? (
           <TableSkeleton rows={4} cols={4} />

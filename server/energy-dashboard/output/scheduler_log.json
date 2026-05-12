@@ -1,7 +1,472 @@
-{
-    "2026-04-30": {
-        "status": "Sent",
-        "timestamp": "2026-04-30T11:19:40.003533+05:30",
-        "trigger_source": "empty_fallback"
-    }
-}
+[
+  {
+    "timestamp": "2026-05-04T11:23:00.895881+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:24:31.167283+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:27:31.690786+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:27:52.149784+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:30:40.320486+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:32:58.046564+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-04T11:41:43.619400+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Review Noida Daily Energy Optimization - May 4, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260504.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-04T11:54:42.168163+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "api_manual",
+    "subject": "Manual Test Report",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260504.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T13:01:38.795705+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T13:03:36.810921+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test_script",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T13:03:51.862094+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 05, 2026 (4 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "4 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-05T13:03:56.739669+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-05T14:05:57.982843+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test_script",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T14:06:07.916105+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 05, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-05T14:06:12.392545+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-05T14:40:12.532145+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test_script",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T14:40:27.969767+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 05, 2026 (2 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "2 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-05T14:40:32.820980+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-05T14:43:06.832376+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test_script",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T15:53:07.734877+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_test_script",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260504.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T15:53:20.839343+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 05, 2026 (2 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "2 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-05T15:53:25.745867+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-05T16:13:56.141681+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 05, 2026 (2 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, krishnav@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "2 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-05T16:18:26.590433+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260504.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-05T16:25:40.053578+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260504.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T10:55:34.599630+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T12:30:45.879949+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T12:43:29.896096+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T12:45:07.787934+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T12:49:36.625599+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Dashboard - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-06T15:06:52.393368+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 5, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": "Energy_Report_20260505.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-08T12:15:13.034959+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 12:15 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T14:55:40.698253+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 14:55 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:02:16.167621+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:02 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:32:23.233190+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:32 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:34:26.694677+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:34 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:37:24.759583+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:37 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:40:51.040259+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:40 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:46:50.259092+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:46 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-08T15:49:33.390246+05:30",
+    "status": "Success",
+    "kind": "inverter_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Alert \u2014 1 Inverter Down | 08-May-2026 15:49 IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "FAULT detected on: Inverter 2"
+  },
+  {
+    "timestamp": "2026-05-11T11:31:48.446042+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 8, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260508.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T11:48:40.966540+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 8, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260508.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T12:01:34.740940+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 11, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260511.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T12:14:27.452715+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 11, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260511.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T12:48:46.165570+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 11, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260511.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T14:07:07.792217+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 10, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260510.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-11T14:11:32.657493+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "manual_run_pipeline",
+    "subject": "Review Noida Daily Energy Optimization Report - May 10, 2026",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": "Energy_Report_20260510.xlsx",
+    "notes": "Daily report email sent"
+  }
+]

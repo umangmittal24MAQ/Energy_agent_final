@@ -1124,7 +1124,7 @@ def initialize_scheduler_from_config() -> None:
 
     _scheduler.add_job(
         _run_solar_scraper,
-        trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(hour='5-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="suryalogix_scraper_job",
         replace_existing=True,
         max_instances=1,
@@ -1142,7 +1142,7 @@ def initialize_scheduler_from_config() -> None:
 
     _scheduler.add_job(
         _run_data_refresh,
-        trigger=CronTrigger(hour='6-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(hour='5-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="data_refresh_interval",
         replace_existing=True,
         max_instances=1,

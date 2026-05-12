@@ -136,8 +136,7 @@ def _enrich_unified_with_live_solar(df_master: pd.DataFrame) -> pd.DataFrame:
     return merged
 
 def _get_master_data(start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-    """Core function to fetch and filter unified data from Electrical Optimization."""
-    from datetime import datetime, timedelta
+    from datetime import datetime
     from zoneinfo import ZoneInfo
 
     sp_service = get_excel_service()
@@ -146,28 +145,15 @@ def _get_master_data(start_date: Optional[str] = None, end_date: Optional[str] =
     if df is None or df.empty:
         return pd.DataFrame()
 
-    # Solar data is always from the PREVIOUS day.
-    # When the frontend asks for "today", shift the window back by 1 day.
-    ist_now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    today_str = ist_now.strftime("%Y-%m-%d")
-    yesterday_str = (ist_now - timedelta(days=1)).strftime("%Y-%m-%d")
-
-    if start_date == today_str:
-        start_date = yesterday_str
-    if end_date == today_str:
-        end_date = yesterday_str
-
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         if start_date:
             df = df[df["Date"] >= pd.to_datetime(start_date)]
         if end_date:
             df = df[df["Date"] <= pd.to_datetime(end_date)]
-
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
 
     df = _enrich_unified_with_live_solar(df)
-        
     return df
 
 def load_unified_data(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
@@ -199,3 +185,78 @@ def load_grid_data(start_date: Optional[str] = None, end_date: Optional[str] = N
     
 def load_daily_summary(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
     return load_unified_data(start_date, end_date)
+
+def load_solar_from_unified(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
+    """Reads solar data directly from UnifiedSolarData sheet — used by the Solar tab.
+    Aggregates to one row per day: last Day Generation reading (cumulative) per date.
+    """
+    import math
+    import numpy as np
+
+    def sanitize(val):
+        if val is None:
+            return None
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            return None
+        if hasattr(val, 'isoformat'):
+            return val.isoformat()
+        if isinstance(val, (np.integer,)):
+            return int(val)
+        if isinstance(val, (np.floating,)):
+            return None if math.isnan(val) or math.isinf(val) else float(val)
+        if isinstance(val, (np.bool_,)):
+            return bool(val)
+        return val
+
+    try:
+        sp_service = get_excel_service()
+        df = sp_service.fetch_sheet_data("unified_solar")
+
+        if df is None or df.empty:
+            return {"data": [], "date_range": {"min_date": None, "max_date": None}, "total_records": 0}
+
+        # Parse and normalize Date
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+        df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
+
+        if start_date:
+            df = df[df["Date"] >= start_date]
+        if end_date:
+            df = df[df["Date"] <= end_date]
+
+        # "Day Generation (kWh)" is cumulative — take the LAST (max) value per day
+        if "Day Generation (kWh)" in df.columns:
+            df["Day Generation (kWh)"] = pd.to_numeric(df["Day Generation (kWh)"], errors="coerce")
+            daily = (
+                df.groupby("Date", as_index=False)["Day Generation (kWh)"]
+                .max()  # last/highest reading of the day = total generation
+                .rename(columns={"Day Generation (kWh)": "Solar Units Consumed(KWh)"})
+            )
+        else:
+            daily = df[["Date"]].drop_duplicates()
+            daily["Solar Units Consumed(KWh)"] = None
+
+        # Solar Cost Saving not available in UnifiedSolarData — set to None
+        daily["Solar Cost Saving (INR)"] = None
+
+        daily = daily.sort_values("Date").reset_index(drop=True)
+
+        dates = pd.to_datetime(daily["Date"], errors="coerce").dropna()
+
+        clean_records = [
+            {k: sanitize(v) for k, v in row.items()}
+            for row in daily.to_dict("records")
+        ]
+
+        return {
+            "data": clean_records,
+            "date_range": {
+                "min_date": dates.min().strftime("%Y-%m-%d") if not dates.empty else None,
+                "max_date": dates.max().strftime("%Y-%m-%d") if not dates.empty else None,
+            },
+            "total_records": len(clean_records),
+        }
+    except Exception as e:
+        logger.error(f"Error loading solar data from UnifiedSolarData: {e}")
+        return {"data": [], "date_range": {"min_date": None, "max_date": None}, "total_records": 0}

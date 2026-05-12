@@ -175,32 +175,7 @@ const EXTENDED_ONLY_COLUMNS = [
 ];
 
 export default function Overview() {
-  const { currentDateParam, currentDateLabel, defaultFilterStart } =
-  useMemo(() => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);   // ← shift to yesterday
-    yesterday.setHours(0, 0, 0, 0);
-    const year = yesterday.getFullYear();
-    const month = String(yesterday.getMonth() + 1).padStart(2, "0");
-    const day = String(yesterday.getDate()).padStart(2, "0");
-    return {
-      currentDateParam: `${year}-${month}-${day}`,
-      currentDateLabel: yesterday.toLocaleDateString(DATE_LOCALE, {
-        year: "numeric", month: "long", day: "numeric",
-      }),
-      defaultFilterStart: `${year}-${month}-01`,
-    };
-  }, []);
-
-  const {
-    data: kpis,
-    isLoading: kpisLoading,
-    error: kpisError,
-  } = useKpis({
-    startDate: currentDateParam,
-    endDate: currentDateParam,
-  });
+  // Step 1: Fetch all unified data first
   const {
     data: unified,
     isLoading: dataLoading,
@@ -209,23 +184,73 @@ export default function Overview() {
 
   const sourceRows = useMemo(() => unified?.data || [], [unified?.data]);
 
+  // Step 2: Get the latest date from master data (availableMax)
+  const dateRange = unified?.date_range || null;
+
+  const availableMax = dateRange?.max_date
+    ? normalizeRowDateKey(dateRange.max_date)
+    : null;
+
+  const availableMin = dateRange?.min_date
+    ? normalizeRowDateKey(dateRange.min_date) || ""
+    : "";
+
+  // Step 3: Derive currentDateParam from availableMax (latest master data date)
+  // Fallback to yesterday only if master data hasn't loaded yet
+  const { currentDateParam, currentDateLabel, defaultFilterStart } =
+    useMemo(() => {
+      if (availableMax) {
+        // Use the latest date actually present in master data
+        const label = new Date(availableMax + "T00:00:00").toLocaleDateString(
+          DATE_LOCALE,
+          { year: "numeric", month: "long", day: "numeric" }
+        );
+        const [year, month] = availableMax.split("-");
+        return {
+          currentDateParam: availableMax,
+          currentDateLabel: label,
+          defaultFilterStart: `${year}-${month}-01`,
+        };
+      }
+      // Fallback while data is loading: use yesterday
+      const today = new Date();
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+      const year = yesterday.getFullYear();
+      const month = String(yesterday.getMonth() + 1).padStart(2, "0");
+      const day = String(yesterday.getDate()).padStart(2, "0");
+      return {
+        currentDateParam: `${year}-${month}-${day}`,
+        currentDateLabel: yesterday.toLocaleDateString(DATE_LOCALE, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }),
+        defaultFilterStart: `${year}-${month}-01`,
+      };
+    }, [availableMax]);
+
+  // Step 4: Fetch KPIs using the correct date (latest master data date)
+  const {
+    data: kpis,
+    isLoading: kpisLoading,
+    error: kpisError,
+  } = useKpis({
+    startDate: currentDateParam,
+    endDate: currentDateParam,
+  });
+
   const [page, setPage] = useState(0);
   const [sortKey, setSortKey] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
   const [activeTab, setActiveTab] = useState("daily");
   const [isExtendedView, setIsExtendedView] = useState(false);
 
-  const dateRange = unified?.date_range || null;
-
-  const availableMax = dateRange?.max_date
-    ? normalizeRowDateKey(dateRange.max_date) || currentDateParam
-    : currentDateParam;
-  const availableMin = dateRange?.min_date
-    ? normalizeRowDateKey(dateRange.min_date) || ""
-    : "";
   const [filterStart, setFilterStart] = useState(defaultFilterStart);
   const [filterEnd, setFilterEnd] = useState("");
-  const effectiveEnd = filterEnd || availableMax;
+  const effectiveEnd = filterEnd || availableMax || currentDateParam;
+
   const dieselConsumedToday = useMemo(() => {
     const todayRows = sourceRows.filter(
       (row) => normalizeRowDateKey(row[COL.DATE]) === currentDateParam,
@@ -348,12 +373,7 @@ export default function Overview() {
                 <ResponsiveContainer width="100%" height={360}>
                   <LineChart
                     data={trendChartData}
-                    margin={{
-                      top: 8,
-                      right: 8,
-                      left: 0,
-                      bottom: 40,
-                    }}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
@@ -363,11 +383,7 @@ export default function Overview() {
                       stroke="#94a3b8"
                       minTickGap={40}
                     />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      stroke="#94a3b8"
-                      width={60}
-                    />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={60} />
                     <Tooltip
                       labelFormatter={formatLongDate}
                       contentStyle={{
@@ -425,12 +441,7 @@ export default function Overview() {
                 <ResponsiveContainer width="100%" height={360}>
                   <BarChart
                     data={trendChartData}
-                    margin={{
-                      top: 8,
-                      right: 8,
-                      left: 0,
-                      bottom: 40,
-                    }}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 40 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
@@ -440,11 +451,7 @@ export default function Overview() {
                       stroke="#94a3b8"
                       minTickGap={40}
                     />
-                    <YAxis
-                      tick={{ fontSize: 11 }}
-                      stroke="#94a3b8"
-                      width={60}
-                    />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" width={60} />
                     <Tooltip
                       labelFormatter={formatLongDate}
                       contentStyle={{
