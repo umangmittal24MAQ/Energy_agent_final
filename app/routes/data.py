@@ -31,6 +31,20 @@ async def get_live_unified_data(
     return data_service.load_unified_data(start_date, end_date)
 
 
+@router.get("/live/inverter-uptime")
+async def get_live_inverter_uptime():
+    """
+    On-demand inverter uptime/downtime for today.
+    Reads directly from UnifiedSolarData — no tracker cache.
+    Called when the frontend Solar tab is opened.
+    """
+    from app.services.inverter_monitor import get_today_uptime_from_sheet
+    result = get_today_uptime_from_sheet()
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+    return result
+
+
 @router.get("/debug/status")
 async def get_integration_status():
     """Simplified health check for the Excel-based architecture."""

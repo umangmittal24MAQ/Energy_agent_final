@@ -422,6 +422,15 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
         total_ac_w    = 0.0
         total_day_kwh = 0.0
 
+        # Pre-collect SMB power values (kW) indexed by position 1–5 so the
+        # inverter loop can apply the new status formula:
+        #   If SMB{i} has power (> 0) but Inverter{i} AC output == 0 → INACTIVE
+        smb_kw: dict = {}
+        if "smb" in last_log and isinstance(last_log["smb"], dict):
+            for j, (_, smb_dev) in enumerate(list(last_log["smb"].items())[:5], start=1):
+                if isinstance(smb_dev, dict):
+                    smb_kw[j] = _safe_float(smb_dev.get("WTOT")) / 1000.0
+
         for i, (inv_id, inv) in enumerate(list(last_log["inverter"].items())[:5], start=1):
             if not isinstance(inv, dict):
                 continue
@@ -434,8 +443,18 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
             total_ac_w    += ac_w
             total_day_kwh += wh_day
 
-            row[f"Inverter{i}_status"] = _get_device_status(inv.get("suryalog_status"))
-            row[f"Inverter{i}"]        = round(ac_w / 1000.0, 3)   # W → kW
+            ac_kw = round(ac_w / 1000.0, 3)
+
+            # New formula: SMB has power but this inverter's AC output is 0
+            # → inverter is inactive / failed even if suryalog_status says ACTIVE.
+            smb_power = smb_kw.get(i, 0.0)
+            if smb_power > 0 and ac_kw == 0.0:
+                inverter_status = "INACTIVE"
+            else:
+                inverter_status = _get_device_status(inv.get("suryalog_status"))
+
+            row[f"Inverter{i}_status"] = inverter_status
+            row[f"Inverter{i}"]        = ac_kw   # W → kW
 
         row["DC Power (kW)"]        = round(total_dc_w / 1000.0, 2)
         row["AC Power (kW)"]        = round(total_ac_w / 1000.0, 2)

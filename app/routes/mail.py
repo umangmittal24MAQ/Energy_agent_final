@@ -81,24 +81,3 @@ async def trigger_manual_report(
     return {"message": "Daily report generation started in background."}
 
 
-# FIX S1: test-connection now requires a logged-in user (not necessarily admin).
-# Without auth, anyone could probe whether SMTP credentials are valid.
-@router.post("/test-connection")
-async def send_test_email(
-    request: TestEmailRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    """
-    Sends a simple text email to verify SMTP credentials.
-    Requires an authenticated session.
-    """
-    result = email_service.send_test_connection(
-        recipient=request.recipient,
-        subject=request.subject,
-        message=request.message,
-    )
-
-    if result["status"] == "Success":
-        return result
-    else:
-        raise HTTPException(status_code=500, detail=result["error"])

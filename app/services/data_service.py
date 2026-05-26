@@ -100,6 +100,22 @@ def _build_live_solar_snapshot(df_solar: pd.DataFrame) -> pd.DataFrame:
     out = out.sort_values(["Date", "_sort_time", "_row_index"])
     out = out.groupby("Date", as_index=False).tail(1)
     out = out.drop(columns=["_sort_time", "_row_index"])
+
+    # SMB Rule of Truth: if SMB has DC power but Inverter AC output == 0,
+    # the inverter has silently failed — override status to FAULT.
+    # This corrects the hardware bug where suryalog_status stays ACTIVE even on failure.
+    for i in range(1, 6):
+        inv_status_col = f"Inverter{i}_status"
+        inv_kw_col     = f"Inverter{i}"
+        smb_kw_col     = f"SMB{i}"
+        if all(c in out.columns for c in [inv_status_col, inv_kw_col, smb_kw_col]):
+            mask = (
+                (out[inv_status_col].astype(str).str.upper() == "ACTIVE") &
+                (pd.to_numeric(out[inv_kw_col], errors="coerce").fillna(0) == 0) &
+                (pd.to_numeric(out[smb_kw_col], errors="coerce").fillna(0) > 0)
+            )
+            out.loc[mask, inv_status_col] = "FAULT"
+
     return out
 
 

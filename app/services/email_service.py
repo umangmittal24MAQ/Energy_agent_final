@@ -697,3 +697,200 @@ def send_operator_reminder() -> Dict[str, Any]:
             "notes": str(e),
         })
         return {"status": "Failed", "error": str(e)}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inverter Fault Alert
+# ──────────────────────────────────────────────────────────────────────────────
+def send_inverter_alert(
+    faulted: list,
+    today_data: dict,
+    date_str: str,
+) -> Dict[str, Any]:
+    """
+    Sends an HTML alert email when one or more inverters are in FAULT or INACTIVE
+    state during a 30-minute monitor tick.
+
+    INACTIVE = SMB has DC power but the inverter's AC output was 0 kW
+               (new formula applied by scrape_to_sharepoint.py).
+    FAULT    = suryalog_status code indicated a device fault.
+
+    Recipients: same to/cc list used by the daily report and operator reminder
+    (REMINDER_TO / REMINDER_CC env vars, or scheduler_config.json).
+    """
+    try:
+        smtp_server     = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        smtp_port       = int(os.getenv("SMTP_PORT", 587))
+        email_from      = os.getenv("EMAIL_FROM", "")
+        sender_password = os.getenv("EMAIL_PASSWORD", "")
+
+        to_list = _emails_from_display(_get_reminder_to())
+        cc_list = _emails_from_display(_get_reminder_cc())
+        all_recipients = to_list + cc_list
+
+        if not all_recipients:
+            logger.error("[INVERTER ALERT] No recipients configured — skipping alert email.")
+            return {"status": "Failed", "error": "No recipients configured"}
+
+        IST = ZoneInfo("Asia/Kolkata")
+        now_ist   = datetime.now(IST)
+        time_str  = now_ist.strftime("%I:%M %p IST")
+        date_disp = datetime.strptime(date_str, "%Y-%m-%d").strftime("%B %d, %Y")
+
+        # Build one table row per faulted inverter
+        rows_html = ""
+        for inv in faulted:
+            entry      = today_data.get(inv, {})
+            up_mins    = int(entry.get("uptime_mins",   0))
+            dn_mins    = int(entry.get("downtime_mins", 0))
+            total_mins = up_mins + dn_mins
+            uptime_pct = round(up_mins / total_mins * 100, 1) if total_mins > 0 else 0.0
+
+            # Colour-code INACTIVE vs FAULT
+            badge_bg    = "#fff3cd"
+            badge_fg    = "#856404"
+            badge_label = "INACTIVE"
+            if dn_mins > 0 and up_mins == 0:
+                # Only downtime recorded — likely a hard FAULT from the start of day
+                badge_bg    = "#f8d7da"
+                badge_fg    = "#721c24"
+                badge_label = "FAULT"
+
+            rows_html += f"""
+            <tr>
+              <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;font-weight:600;color:#333;">{html_lib.escape(inv)}</td>
+              <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;">
+                <span style="background:{badge_bg};color:{badge_fg};padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">{badge_label}</span>
+              </td>
+              <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;color:#c0392b;font-weight:500;">{dn_mins} min</td>
+              <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;color:#27ae60;">{up_mins} min</td>
+              <td style="padding:10px 14px;border-bottom:1px solid #f0f0f0;color:#555;">{uptime_pct}%</td>
+            </tr>"""
+
+        # Healthy inverters summary
+        healthy_rows = ""
+        from app.services.inverter_monitor import INVERTERS as _ALL_INVERTERS
+        for inv in _ALL_INVERTERS:
+            if inv in faulted:
+                continue
+            entry      = today_data.get(inv, {})
+            up_mins    = int(entry.get("uptime_mins",   0))
+            dn_mins    = int(entry.get("downtime_mins", 0))
+            total_mins = up_mins + dn_mins
+            uptime_pct = round(up_mins / total_mins * 100, 1) if total_mins > 0 else 0.0
+            healthy_rows += f"""
+            <tr>
+              <td style="padding:8px 14px;border-bottom:1px solid #f5f5f5;color:#555;">{html_lib.escape(inv)}</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #f5f5f5;">
+                <span style="background:#d4edda;color:#155724;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">ACTIVE</span>
+              </td>
+              <td style="padding:8px 14px;border-bottom:1px solid #f5f5f5;color:#c0392b;">{dn_mins} min</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #f5f5f5;color:#27ae60;">{up_mins} min</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #f5f5f5;color:#555;">{uptime_pct}%</td>
+            </tr>"""
+
+        fault_count  = len(faulted)
+        plural       = "inverter" if fault_count == 1 else "inverters"
+        faulted_list = ", ".join(faulted)
+
+        healthy_section = ""
+        if healthy_rows:
+            healthy_section = f"""
+          <h3 style="font-size:14px;font-weight:600;color:#27ae60;margin:0 0 8px;">Healthy inverters</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;overflow:hidden;margin-bottom:20px;">
+            <thead>
+              <tr style="background:#d4edda;">
+                <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #c3e6cb;">Inverter</th>
+                <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #c3e6cb;">Status</th>
+                <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #c3e6cb;">Downtime today</th>
+                <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #c3e6cb;">Uptime today</th>
+                <th style="padding:8px 14px;text-align:left;border-bottom:2px solid #c3e6cb;">Uptime %</th>
+              </tr>
+            </thead>
+            <tbody>{healthy_rows}</tbody>
+          </table>"""
+
+        body_html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:700px;margin:auto;padding:20px;color:#333;">
+
+          <div style="border-left:5px solid #dc3545;padding:16px 20px;border-radius:4px;background:#fff5f5;margin-bottom:20px;">
+            <h2 style="color:#c0392b;margin:0 0 6px;font-size:18px;">
+              &#9888;&#65039; Inverter Fault Detected
+            </h2>
+            <p style="margin:0;font-size:14px;color:#555;">
+              <b>{fault_count} {plural}</b> reported a fault at <b>{time_str}</b> on <b>{date_disp}</b>.<br>
+              Affected: <b>{html_lib.escape(faulted_list)}</b>
+            </p>
+            <p style="margin:8px 0 0;font-size:12px;color:#888;">
+              <b>INACTIVE</b> = SMB has DC input but inverter AC output was 0 kW (possible failure or disconnection).<br>
+              <b>FAULT</b> = Device status code reported a fault condition from SuryaLogix.
+            </p>
+          </div>
+
+          <h3 style="font-size:14px;font-weight:600;color:#c0392b;margin:0 0 8px;">Faulted inverters</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;overflow:hidden;margin-bottom:20px;">
+            <thead>
+              <tr style="background:#f8d7da;">
+                <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #f5c6cb;">Inverter</th>
+                <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #f5c6cb;">Status</th>
+                <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #f5c6cb;">Downtime today</th>
+                <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #f5c6cb;">Uptime today</th>
+                <th style="padding:10px 14px;text-align:left;border-bottom:2px solid #f5c6cb;">Uptime %</th>
+              </tr>
+            </thead>
+            <tbody>{rows_html}</tbody>
+          </table>
+
+          {healthy_section}
+
+          <p style="font-size:12px;color:#999;margin-top:18px;">
+            This alert fires automatically every 30 minutes when a fault is detected.<br>
+            Please inspect the affected inverter(s) and check the SuryaLogix portal for details.
+          </p>
+        </div>"""
+
+        subject = (
+            f"\u26a0\ufe0f Inverter Fault Alert \u2014 "
+            f"{fault_count} {plural} on {date_disp} at {time_str}"
+        )
+
+        msg = MIMEMultipart("alternative")
+        msg["From"]    = email_from
+        msg["To"]      = ", ".join(to_list)
+        if cc_list:
+            msg["Cc"]  = ", ".join(cc_list)
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body_html, "html"))
+
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
+            server.starttls()
+            server.login(email_from, sender_password)
+            server.sendmail(email_from, all_recipients, msg.as_string())
+
+        _append_scheduler_send_history({
+            "timestamp":      now_ist.isoformat(),
+            "status":         "Success",
+            "kind":           "inverter_fault_alert",
+            "trigger_source": "inverter_monitor",
+            "subject":        subject,
+            "recipients":     ", ".join(all_recipients),
+            "attachment":     None,
+            "notes":          f"Faulted inverters: {faulted_list}",
+        })
+
+        logger.info(f"[INVERTER ALERT] Alert sent to {all_recipients} — {faulted_list}")
+        return {"status": "Success", "faulted": faulted, "recipients": all_recipients}
+
+    except Exception as e:
+        logger.error(f"[INVERTER ALERT] Failed to send alert email: {e}")
+        _append_scheduler_send_history({
+            "timestamp":      datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+            "status":         "Failed",
+            "kind":           "inverter_fault_alert",
+            "trigger_source": "inverter_monitor",
+            "subject":        f"Inverter fault alert — {', '.join(faulted)}",
+            "recipients":     ", ".join(_emails_from_display(_get_reminder_to() + _get_reminder_cc())),
+            "attachment":     None,
+            "notes":          str(e),
+        })
+        return {"status": "Failed", "error": str(e)}

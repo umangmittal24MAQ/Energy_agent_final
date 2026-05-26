@@ -741,7 +741,7 @@ def _run_master_data_engine_once(
         subprocess.run(
             cmd,
             check=True,
-            timeout=90
+            timeout=300
         )
         return {"status": "Success"}
         
@@ -837,6 +837,15 @@ def _run_solar_scraper() -> None:
         logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode}).")
     except Exception as exc:
         logger.error(f"Scraper completely failed to trigger: {exc}")
+
+    # Run inverter monitor after every scraper tick (success or fail).
+    # Even if the scraper failed, the monitor may still find the previous row
+    # on SharePoint and update the tracker / send a fault alert.
+    try:
+        from app.services.inverter_monitor import run_inverter_monitor
+        run_inverter_monitor()
+    except Exception as exc:
+        logger.error(f"Inverter monitor failed: {exc}")
 
 
 def _run_data_refresh() -> None:
@@ -1310,6 +1319,13 @@ def initialize_scheduler_from_config() -> None:
         coalesce=True,
     )
     logger.info("Meter OCR engine scheduled: start 07:00 IST / stop 20:00 IST daily.")
+
+    # 🚀 THE FIX: Start it immediately if the server boots up during the day!
+    IST = ZoneInfo("Asia/Kolkata")
+    now = datetime.now(IST)
+    if 7 <= now.hour < 20:
+        logger.info("Server booted during operating hours. Starting Meter OCR engine immediately...")
+        _start_meter_ocr_engine()
 
     cfg = load_scheduler_config()
     if cfg.get("auto_start", False):
