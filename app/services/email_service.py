@@ -1,27 +1,143 @@
 """
 Email service for sending energy reports and notifications.
+Transport: Microsoft Graph API (application permissions, client credentials flow).
 """
 import io
 import os
 import re
 import json
-import smtplib
+import base64
 import logging
 import html as html_lib
 from email.utils import getaddresses
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import pandas as pd
 from zoneinfo import ZoneInfo
+import msal
+import requests
 
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Microsoft Graph API — Email Transport
+# ──────────────────────────────────────────────────────────────────────────────
+_graph_token_cache: Dict[str, Any] = {}
+
+def _get_graph_token() -> str:
+    """Obtain an access token via client credentials (app-only). Cached in memory."""
+    tenant_id     = os.environ["EMAIL_AZURE_TENANT_ID"]
+    client_id     = os.environ["EMAIL_AZURE_CLIENT_ID"]
+    client_secret = os.environ["EMAIL_AZURE_CLIENT_SECRET"]
+
+    cache_key = f"{tenant_id}:{client_id}"
+    cached = _graph_token_cache.get(cache_key)
+    if cached:
+        import time
+        if time.time() < cached["expires_at"] - 60:
+            return cached["token"]
+
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    app = msal.ConfidentialClientApplication(
+        client_id,
+        authority=authority,
+        client_credential=client_secret,
+    )
+    result = app.acquire_token_for_client(
+        scopes=["https://graph.microsoft.com/.default"]
+    )
+    if "access_token" not in result:
+        raise RuntimeError(
+            f"Graph token acquisition failed: {result.get('error_description', result)}"
+        )
+
+    import time
+    _graph_token_cache[cache_key] = {
+        "token":      result["access_token"],
+        "expires_at": time.time() + result.get("expires_in", 3600),
+    }
+    return result["access_token"]
+
+
+def _graph_send(
+    *,
+    from_address: str,
+    to_list: list[str],
+    cc_list: list[str],
+    subject: str,
+    html_body: str,
+    plain_body: str = "",
+    attachment_bytes: bytes | None = None,
+    attachment_name: str | None = None,
+) -> None:
+    """
+    Send an email via POST /users/{from_address}/sendMail using Graph API.
+
+    from_address must be the shared mailbox primary address OR one of its
+    verified aliases (alias sending requires SendFromAliasEnabled=True on tenant).
+    The app must have Mail.Send application permission and be scoped via
+    Application Access Policy to the aiplatform@maqsoftware.com mailbox.
+    """
+    token = _get_graph_token()
+    sender_mailbox = os.getenv("GRAPH_SENDER_MAILBOX", "aiplatform@maqsoftware.com")
+
+    message: Dict[str, Any] = {
+        "subject": subject,
+        "from": {
+            "emailAddress": {"address": from_address}
+        },
+        "toRecipients": [
+            {"emailAddress": {"address": e}} for e in to_list
+        ],
+        "body": {
+            "contentType": "HTML",
+            "content": html_body or plain_body,
+        },
+    }
+
+    if cc_list:
+        message["ccRecipients"] = [
+            {"emailAddress": {"address": e}} for e in cc_list
+        ]
+
+    if attachment_bytes and attachment_name:
+        message["attachments"] = [
+            {
+                "@odata.type":  "#microsoft.graph.fileAttachment",
+                "name":         attachment_name,
+                "contentType":  "application/octet-stream",
+                "contentBytes": base64.b64encode(attachment_bytes).decode(),
+            }
+        ]
+
+    payload = {"message": message, "saveToSentItems": "true"}
+
+    url = f"https://graph.microsoft.com/v1.0/users/{sender_mailbox}/sendMail"
+    resp = requests.post(
+        url,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type":  "application/json",
+        },
+        json=payload,
+        timeout=30,
+    )
+
+    if resp.status_code == 202:
+        return  # accepted — success
+
+    # Surface a useful error
+    try:
+        detail = resp.json()
+    except Exception:
+        detail = resp.text
+    raise RuntimeError(
+        f"Graph sendMail failed [{resp.status_code}]: {detail}"
+    )
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Formatting Helpers
@@ -115,31 +231,33 @@ def send_admin_alert(subject: str, error_message: str) -> None:
         return
 
     try:
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", 587))
-        email_from = os.getenv("EMAIL_FROM", "")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
+        email_from = os.getenv("EMAIL_FROM", "aiplatform@maqsoftware.com")
 
-        if not email_from or not sender_password:
-            logger.error("send_admin_alert: EMAIL_FROM or EMAIL_PASSWORD not set. Cannot send alert.")
-            return
-
-        msg = MIMEText(
+        plain_body = (
             f"Energy Dashboard Alert\n\n"
             f"Subject: {subject}\n"
             f"Time: {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}\n\n"
-            f"Error:\n{error_message}",
-            "plain",
+            f"Error:\n{error_message}"
         )
-        msg["From"] = email_from
-        msg["To"] = admin_email
-        msg["Subject"] = f"[ALERT] Energy Dashboard: {subject}"
+        html_body = (
+            f"<div style=\"font-family:Arial,sans-serif;max-width:560px;padding:20px;\">"
+            f"<div style=\"border-left:4px solid #dc3545;padding:12px 18px;background:#fff5f5;border-radius:4px;\">"
+            f"<h2 style=\"color:#c0392b;margin:0 0 6px;font-size:16px;\">[ALERT] Energy Dashboard: {subject}</h2>"
+            f"<p style=\"margin:0;font-size:13px;color:#555;\">"
+            f"<b>Time:</b> {datetime.now(ZoneInfo('Asia/Kolkata')).isoformat()}</p>"
+            f"</div>"
+            f"<pre style=\"font-size:13px;color:#333;background:#f9f9f9;padding:14px;border-radius:4px;margin-top:14px;\">"
+            f"{html_lib.escape(error_message)}</pre></div>"
+        )
 
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, [admin_email], msg.as_string())
-
+        _graph_send(
+            from_address=email_from,
+            to_list=[admin_email],
+            cc_list=[],
+            subject=f"[ALERT] Energy Dashboard: {subject}",
+            html_body=html_body,
+            plain_body=plain_body,
+        )
         logger.info(f"Admin alert sent to {admin_email}: {subject}")
     except Exception as alert_exc:
         logger.error(f"Failed to send admin alert: {alert_exc}")
@@ -280,10 +398,7 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             attachment_name = None
 
         # --- SEND EMAIL ---
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", 587))
-        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
+        email_from = os.getenv("EMAIL_FROM", "energyreports@maqsoftware.com")
 
         operator_email = str(sched_config.get("to", "")).strip()
         cc_emails_str = str(sched_config.get("cc", "")).strip()
@@ -297,27 +412,18 @@ def send_daily_report(trigger_source: str = "scheduler", manual_date: Optional[s
             subject_date_str = report_date_title
 
         raw_subject = sched_config.get("subject", "Daily Energy Report - Noida Campus - {date}")
-        base_subject = raw_subject.replace("{date}", subject_date_str).replace("â€”", "-").replace("—", "-")
+        base_subject = raw_subject.replace("{date}", subject_date_str).replace("\u2014", "-").replace("\u2013", "-")
         subject = f"{subject_prefix}{base_subject}"
 
-        msg = MIMEMultipart("alternative")
-        msg["From"] = email_from
-        msg["To"] = ", ".join(to_list)
-        if cc_list: msg["Cc"] = ", ".join(cc_list)
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_html, "html"))
-
-        if attachment_bytes and attachment_name:
-            part = MIMEBase("application", "octet-stream")
-            part.set_payload(attachment_bytes)
-            encoders.encode_base64(part)
-            part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
-            msg.attach(part)
-
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, all_recipients, msg.as_string())
+        _graph_send(
+            from_address=email_from,
+            to_list=to_list,
+            cc_list=cc_list,
+            subject=subject,
+            html_body=body_html,
+            attachment_bytes=attachment_bytes,
+            attachment_name=attachment_name,
+        )
 
         _append_scheduler_send_history({
             "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
@@ -519,10 +625,7 @@ def _generate_excel_attachment(df: pd.DataFrame) -> bytes:
 # ──────────────────────────────────────────────────────────────────────────────
 def send_data_correction_alert(errors: list) -> Dict[str, Any]:
     try:
-        smtp_server     = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port       = int(os.getenv("SMTP_PORT", 587))
-        email_from      = os.getenv("EMAIL_FROM", "")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
+        email_from = os.getenv("EMAIL_FROM", "infraalerts@maqsoftware.com")
 
         to_list = _emails_from_display(_get_reminder_to())
         cc_list = _emails_from_display(_get_reminder_cc())
@@ -596,18 +699,13 @@ def send_data_correction_alert(errors: list) -> Dict[str, Any]:
 
         subject = f"⚠️ Action Required: Fix Excel Data for {today_str} ({len(errors)} error(s))"
 
-        msg = MIMEMultipart("alternative")
-        msg["From"]    = email_from
-        msg["To"]      = ", ".join(to_list)
-        if cc_list:
-            msg["Cc"]  = ", ".join(cc_list)
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_html, "html"))
-
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, all_recipients, msg.as_string())
+        _graph_send(
+            from_address=email_from,
+            to_list=to_list,
+            cc_list=cc_list,
+            subject=subject,
+            html_body=body_html,
+        )
 
         _append_scheduler_send_history({
             "timestamp":      datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
@@ -630,10 +728,7 @@ def send_data_correction_alert(errors: list) -> Dict[str, Any]:
 
 def send_operator_reminder() -> Dict[str, Any]:
     try:
-        smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port = int(os.getenv("SMTP_PORT", 587))
-        email_from = os.getenv("EMAIL_FROM", "suryalogix.renew@gmail.com")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
+        email_from = os.getenv("EMAIL_FROM", "energyreports@maqsoftware.com")
 
         to_list = _emails_from_display(_get_reminder_to())
         cc_list = _emails_from_display(_get_reminder_cc())
@@ -653,25 +748,21 @@ def send_operator_reminder() -> Dict[str, Any]:
             return {"status": "Failed", "error": "Reminder recipients are empty"}
 
         subject = "Action Required: Operator Data Missing"
-        body = (
+        plain_body = (
             f"Hello,\n\n"
             f"The Automated Energy Pipeline attempted to run, but no operator data was found for today.\n"
             f"Please update the Grid and Diesel entries in the SharePoint Excel file so the report can be generated.\n\n"
             f"Thank you,\nEnergy Automation Agent"
         )
 
-        msg = MIMEMultipart("alternative")
-        msg["From"] = email_from
-        msg["To"] = ", ".join(_get_reminder_to())
-        if cc_list:
-            msg["Cc"] = ", ".join(_get_reminder_cc())
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body, "plain"))
-
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, all_recipients, msg.as_string())
+        _graph_send(
+            from_address=email_from,
+            to_list=to_list,
+            cc_list=cc_list,
+            subject=subject,
+            html_body="",
+            plain_body=plain_body,
+        )
 
         _append_scheduler_send_history({
             "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
@@ -719,10 +810,7 @@ def send_inverter_alert(
     (REMINDER_TO / REMINDER_CC env vars, or scheduler_config.json).
     """
     try:
-        smtp_server     = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        smtp_port       = int(os.getenv("SMTP_PORT", 587))
-        email_from      = os.getenv("EMAIL_FROM", "")
-        sender_password = os.getenv("EMAIL_PASSWORD", "")
+        email_from = os.getenv("EMAIL_FROM", "infraalerts@maqsoftware.com")
 
         to_list = _emails_from_display(_get_reminder_to())
         cc_list = _emails_from_display(_get_reminder_cc())
@@ -854,18 +942,13 @@ def send_inverter_alert(
             f"{fault_count} {plural} on {date_disp} at {time_str}"
         )
 
-        msg = MIMEMultipart("alternative")
-        msg["From"]    = email_from
-        msg["To"]      = ", ".join(to_list)
-        if cc_list:
-            msg["Cc"]  = ", ".join(cc_list)
-        msg["Subject"] = subject
-        msg.attach(MIMEText(body_html, "html"))
-
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
-            server.starttls()
-            server.login(email_from, sender_password)
-            server.sendmail(email_from, all_recipients, msg.as_string())
+        _graph_send(
+            from_address=email_from,
+            to_list=to_list,
+            cc_list=cc_list,
+            subject=subject,
+            html_body=body_html,
+        )
 
         _append_scheduler_send_history({
             "timestamp":      now_ist.isoformat(),
