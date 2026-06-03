@@ -13,9 +13,8 @@ import logging
 import os
 import sys
 
-# THE FIX: Force Playwright to look in Azure's persistent storage BEFORE it imports!
+# Force Playwright to look in Azure's persistent storage
 os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/home/site/pw-browsers"
-
 
 from datetime import datetime
 from pathlib import Path
@@ -93,7 +92,6 @@ _drive_id:     Optional[str] = None
 # Offline Cache Handlers
 # ──────────────────────────────────────────────────────────────────────────────
 def _save_to_cache(row: Dict) -> None:
-    """Save a failed row to a local JSON file."""
     cache = []
     if CACHE_FILE.exists():
         try:
@@ -107,13 +105,12 @@ def _save_to_cache(row: Dict) -> None:
     logger.info(f"Row saved to offline cache. Total pending rows: {len(cache)}")
 
 def _load_and_clear_cache() -> List[Dict]:
-    """Load pending rows and clear the cache file."""
     if not CACHE_FILE.exists():
         return []
     try:
         with open(CACHE_FILE, "r") as f:
             cache = json.load(f)
-        CACHE_FILE.unlink() # Delete the file after reading
+        CACHE_FILE.unlink()
         logger.info(f"Loaded {len(cache)} rows from offline cache.")
         return cache
     except Exception as e:
@@ -183,7 +180,6 @@ def _upload_excel(file_bytes: bytes) -> None:
     resp.raise_for_status()
 
 def _upload_excel_with_retry(file_bytes: bytes, retries: int = 3, delay: int = 30) -> None:
-    """Retries 5 times, waiting 1 minute between attempts (total 5 mins limit)."""
     for attempt in range(1, retries + 1):
         try:
             _upload_excel(file_bytes)
@@ -196,21 +192,30 @@ def _upload_excel_with_retry(file_bytes: bytes, retries: int = 3, delay: int = 3
                 raise
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Scraper  — EXACTLY your original working logic
+# Scraper
 # ──────────────────────────────────────────────────────────────────────────────
 captured_data: List[Dict] = []
 
 def _on_response(response) -> None:
     try:
+        # Explicitly log the Method (POST/GET) for gen_info
+        if "gen_info" in response.url:
+            logger.info(f"🔍 DEBUG [Network]: Saw gen_info response! Method: {response.request.method} | Status: {response.status} | Content-Type: {response.headers.get('content-type')}")
+
         if response.request.resource_type in ("xhr", "fetch"):
             try:
                 data = response.json()
                 captured_data.append({"url": response.url, "data": data})
                 logger.info(f"📡 API URL: {response.url}")
-            except Exception:
-                pass
+            except Exception as json_err:
+                if "gen_info" in response.url:
+                    logger.error(f"❌ DEBUG [Parse]: gen_info ({response.request.method}) returned non-JSON body. Error: {json_err}")
     except Exception:
         pass
+
+def _on_request_failed(request) -> None:
+    if "gen_info" in request.url:
+        logger.error(f"🚨 DEBUG [Blocked]: gen_info ({request.method}) request failed/aborted! Reason: {request.failure}")
 
 def run_scraper() -> List[Dict]:
     global captured_data
@@ -218,13 +223,14 @@ def run_scraper() -> List[Dict]:
 
     try:
         with sync_playwright() as p:
-            # ✅ Plain launch + plain new_context
+            # Clean, default Chromium launch
             browser = p.chromium.launch(headless=HEADLESS)
             context = browser.new_context()
             context.set_default_timeout(1200000)
             page    = context.new_page()
 
             page.on("response", _on_response)
+            page.on("requestfailed", _on_request_failed)
 
             logger.info("Opening site...")
             page.goto("https://cloud.suryalog.com")
@@ -236,26 +242,47 @@ def run_scraper() -> List[Dict]:
             page.fill("#password", SURYALOG_PASSWORD)
             page.wait_for_timeout(500)
 
-            page.click("#btnlogin")
-            logger.info("Login button clicked, waiting for page to load...")
+            # --- SMART WAITING LOGIC ---
+            def is_gen_info(response):
+                if "gen_info" in response.url:
+                    logger.info(f"⏱️ DEBUG [Wait Check]: Evaluating URL: {response.url} | Status: {response.status}")
+                    if response.status == 200:
+                        return True
+                    else:
+                        logger.warning(f"⚠️ DEBUG [Wait Check]: gen_info ignored because status is not 200 (It was {response.status})")
+                return False
 
-            # ✅ EXACT sequence requested by user
-            page.wait_for_timeout(8000)
-            logger.info("Waiting for APIs...")
-            page.wait_for_timeout(10000)
-            logger.info("Triggering interaction...")
-            page.mouse.click(100, 100)
-            page.wait_for_timeout(5000)
-            logger.info("Reloading...")
-            page.reload()
-            page.wait_for_timeout(10000)
+            try:
+                # Use context manager to prevent race conditions during the click
+                logger.info("Clicking login and waiting up to 45s for gen_info API...")
+                with page.expect_response(is_gen_info, timeout=120000):
+                    page.click("#btnlogin")
+                logger.info("✅ gen_info captured successfully!")
+                
+            except Exception as exc:
+                logger.warning(f"gen_info not fired organically: {exc}. Triggering fallback reload...")
+                try:
+                    page.mouse.click(100, 100)
+                    page.wait_for_timeout(2000)
+                    
+                    # Use context manager for the fallback reload too
+                    with page.expect_response(is_gen_info, timeout=120000):
+                        page.reload()
+                    logger.info("✅ gen_info captured after reload!")
+                    
+                except Exception as fallback_err:
+                    logger.warning(f"Fallback failed: {fallback_err}")
 
-            if not captured_data:
+            # Brief pause for the _on_response listener to finish parsing
+            page.wait_for_timeout(2000)
+            # --- END SMART WAITING LOGIC ---
+
+            if not any("gen_info" in item["url"] for item in captured_data):
                 screenshot_path = SCRIPT_DIR / "login_failure.png"
                 page.screenshot(path=str(screenshot_path))
                 logger.warning(
-                    f"0 responses captured. Screenshot → {screenshot_path}\n"
-                    "  Set SURYALOG_HEADLESS=false in .env and re-run to debug."
+                    f"0 gen_info responses captured. Screenshot → {screenshot_path}\n"
+                    "  Check the DEBUG logs above to see if gen_info failed with an error or was aborted."
                 )
 
             browser.close()
@@ -322,7 +349,6 @@ def _select_primary_meter(meters: Dict) -> Optional[Dict]:
     return None
 
 def _find_numeric_by_keys(payload: Any, key_candidates: set[str]) -> Optional[float]:
-    """Helper to deeply scan JSON for fallback yesterday keys"""
     if isinstance(payload, dict):
         for k, v in payload.items():
             if str(k).strip().lower() in key_candidates:
@@ -341,7 +367,6 @@ def _find_numeric_by_keys(payload: Any, key_candidates: set[str]) -> Optional[fl
     return None
 
 def _extract_yesterday_generation_kwh(last_log: Dict, plant_data: Dict, live_data: Dict) -> float:
-    """Extract yesterday generation (kWh) specifically targeting duration block 46800."""
     def find_daily_duration_value(payload: Any) -> Optional[float]:
         if isinstance(payload, dict):
             if payload.get("duration") == 46800 and "value" in payload:
@@ -422,15 +447,6 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
         total_ac_w    = 0.0
         total_day_kwh = 0.0
 
-        # Pre-collect SMB power values (kW) indexed by position 1–5 so the
-        # inverter loop can apply the new status formula:
-        #   If SMB{i} has power (> 0) but Inverter{i} AC output == 0 → INACTIVE
-        smb_kw: dict = {}
-        if "smb" in last_log and isinstance(last_log["smb"], dict):
-            for j, (_, smb_dev) in enumerate(list(last_log["smb"].items())[:5], start=1):
-                if isinstance(smb_dev, dict):
-                    smb_kw[j] = _safe_float(smb_dev.get("WTOT")) / 1000.0
-
         for i, (inv_id, inv) in enumerate(list(last_log["inverter"].items())[:5], start=1):
             if not isinstance(inv, dict):
                 continue
@@ -443,25 +459,14 @@ def _extract_row(api_data: List[Dict]) -> Dict[str, Any]:
             total_ac_w    += ac_w
             total_day_kwh += wh_day
 
-            ac_kw = round(ac_w / 1000.0, 3)
-
-            # New formula: SMB has power but this inverter's AC output is 0
-            # → inverter is inactive / failed even if suryalog_status says ACTIVE.
-            smb_power = smb_kw.get(i, 0.0)
-            if smb_power > 0 and ac_kw == 0.0:
-                inverter_status = "INACTIVE"
-            else:
-                inverter_status = _get_device_status(inv.get("suryalog_status"))
-
-            row[f"Inverter{i}_status"] = inverter_status
-            row[f"Inverter{i}"]        = ac_kw   # W → kW
+            row[f"Inverter{i}_status"] = _get_device_status(inv.get("suryalog_status"))
+            row[f"Inverter{i}"]        = round(ac_w / 1000.0, 3)
 
         row["DC Power (kW)"]        = round(total_dc_w / 1000.0, 2)
         row["AC Power (kW)"]        = round(total_ac_w / 1000.0, 2)
         row["Active Power (kW)"]    = row["AC Power (kW)"]
         row["Day Generation (kWh)"] = round(total_day_kwh, 2)
 
-    # ✅ ADDED: Yesterday Generation Extraction
     row["Yesterday Generation (kWh)"] = _extract_yesterday_generation_kwh(last_log, plant_data, live_data)
 
     if "meter" in last_log and isinstance(last_log["meter"], dict):
@@ -504,7 +509,6 @@ def update_excel_in_memory(file_bytes: bytes, new_row: Dict) -> bytes:
     logger.info("Loading Excel file into Pandas…")
     df = pd.read_excel(io.BytesIO(file_bytes), sheet_name="Sheet1")
 
-    # Safely map yesterday column if it exists under a weird name
     y_col = next((c for c in df.columns if "yesterday" in str(c).lower() and "gen" in str(c).lower()), None)
     if y_col and "Yesterday Generation (kWh)" in new_row and y_col != "Yesterday Generation (kWh)":
         new_row[y_col] = new_row.pop("Yesterday Generation (kWh)")
@@ -545,7 +549,6 @@ def main() -> None:
         logger.info("Downloading UnifiedSolarData.xlsx from SharePoint…")
         file_bytes = _download_excel()
         
-        # Apply all pending rows
         for r in all_rows_to_upload:
             file_bytes = update_excel_in_memory(file_bytes, r)
             
@@ -556,12 +559,10 @@ def main() -> None:
     except Exception as exc:
         logger.error(f"❌ SharePoint pipeline FAILED: {exc}")
         
-        # ✅ THE FIX: Save to cache if file was locked!
         for r in all_rows_to_upload:
             _save_to_cache(r)
             
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

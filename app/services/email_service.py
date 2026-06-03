@@ -725,8 +725,11 @@ def send_data_correction_alert(errors: list) -> Dict[str, Any]:
         logger.error(f"[DATA ALERT] Failed to send correction email: {e}")
         return {"status": "Failed", "error": str(e)}
 
-
-def send_operator_reminder() -> Dict[str, Any]:
+def send_operator_reminder(
+    reminder_number: int = 1,
+    total_reminders: int = 3,
+    deadline_str: str = "10:30 AM",
+) -> Dict[str, Any]:
     try:
         email_from = os.getenv("EMAIL_FROM", "energyreports@maqsoftware.com")
 
@@ -740,27 +743,77 @@ def send_operator_reminder() -> Dict[str, Any]:
                 "status": "Failed",
                 "kind": "operator_reminder",
                 "trigger_source": "operator_reminder_cycle",
-                "subject": "Action Required: Operator Data Missing",
+                "subject": f"Action Required: Operator Data Missing (Reminder {reminder_number}/{total_reminders})",
                 "recipients": "",
                 "attachment": None,
                 "notes": "Reminder recipients are empty",
             })
             return {"status": "Failed", "error": "Reminder recipients are empty"}
 
-        subject = "Action Required: Operator Data Missing"
-        plain_body = (
-            f"Hello,\n\n"
-            f"The Automated Energy Pipeline attempted to run, but no operator data was found for today.\n"
-            f"Please update the Grid and Diesel entries in the SharePoint Excel file so the report can be generated.\n\n"
-            f"Thank you,\nEnergy Automation Agent"
+        reminder_tag = f"Reminder {reminder_number}/{total_reminders}"
+        subject = f"Action Required: Operator Data Missing ({reminder_tag})"
+
+        # FIX 1: Cleaned up the redundant "reminder Reminder 1/3" phrasing
+        border_color, bg_color, heading_color = "#FFC000", "#fffbeb", "#92400e"
+
+        if reminder_number == total_reminders:
+            urgency_note = ""
+        elif reminder_number == 2:
+            urgency_note = ""
+        else:
+            urgency_note = ""
+
+        now_str = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%d %b %Y, %I:%M %p IST")
+
+        fallback_note = (
+            f"Note: This is the last reminder. At {deadline_str} the report will be sent automatically "
+            f"using yesterday's data if today's entries are still missing."
+            if reminder_number == total_reminders
+            else
+            f"Note: If data is not updated before the {deadline_str} deadline, the report will be sent "
+            f"automatically using yesterday's data as a fallback."
         )
 
+        # FIX 2: Added structural formatting and clear spacing for the plain text fallback
+        plain_body = (
+            f"[{reminder_tag}] ACTION REQUIRED: Operator Data Missing\n"
+            f"-" * 50 + "\n\n"
+            f"The Automated Energy Pipeline checked at {now_str} but no operator data was found for today.\n\n"
+            f"Please update the Grid and Diesel entries in the SharePoint Excel file.\n\n"
+            f"{urgency_note}\n\n"
+            f"{fallback_note}\n\n"
+            f"Thank you,\n"
+            f"Energy Automation Agent"
+        )
+
+        # FIX 3: Created an HTML body utilizing the severity colors you already defined
+        html_body = f"""
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid {border_color}; border-radius: 8px; overflow: hidden; color: #333;">
+            <div style="background-color: {bg_color}; padding: 20px; border-bottom: 1px solid {border_color};">
+                <h2 style="color: {heading_color}; margin: 0; font-size: 20px;">Action Required: Operator Data Missing</h2>
+                <p style="color: {heading_color}; margin: 5px 0 0 0; font-size: 14px; font-weight: bold;">{reminder_tag}</p>
+            </div>
+            <div style="padding: 20px; background-color: #ffffff; line-height: 1.6;">
+                <p style="margin-top: 0;">The Automated Energy Pipeline checked at <strong>{now_str}</strong>, but no operator data was found for today.</p>
+                <p style="font-size: 16px;"><strong>Please update the Grid and Diesel entries in the SharePoint Excel file.</strong></p>
+                <p style="color: {heading_color}; font-weight: 500;">{urgency_note}</p>
+                
+                <div style="background-color: #f8f9fa; border-left: 4px solid #adb5bd; padding: 12px; margin: 25px 0 15px 0; font-size: 13px; color: #555;">
+                    <em>{fallback_note}</em>
+                </div>
+                
+                <p style="margin-bottom: 0;">Thank you,<br/><span style="font-weight: 600; color: #555;">Energy Automation Agent</span></p>
+            </div>
+        </div>
+        """
+
+        # FIX 4: Passed the new html_body into your mail sender
         _graph_send(
             from_address=email_from,
             to_list=to_list,
             cc_list=cc_list,
             subject=subject,
-            html_body="",
+            html_body=html_body, 
             plain_body=plain_body,
         )
 
@@ -772,24 +825,23 @@ def send_operator_reminder() -> Dict[str, Any]:
             "subject": subject,
             "recipients": ", ".join(all_recipients),
             "attachment": None,
-            "notes": f"Operator reminder sent to {len(all_recipients)} recipients",
+            "notes": f"{reminder_tag} sent to {len(all_recipients)} recipients",
         })
 
-        return {"status": "Success", "notes": f"Operator reminder sent to {len(all_recipients)} recipients"}
+        return {"status": "Success", "notes": f"{reminder_tag} sent to {len(all_recipients)} recipients"}
+
     except Exception as e:
         _append_scheduler_send_history({
             "timestamp": datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
             "status": "Failed",
             "kind": "operator_reminder",
             "trigger_source": "operator_reminder_cycle",
-            "subject": "Action Required: Operator Data Missing",
+            "subject": f"Action Required: Operator Data Missing (Reminder {reminder_number}/{total_reminders})",
             "recipients": ", ".join(_emails_from_display(_get_reminder_to() + _get_reminder_cc())),
             "attachment": None,
             "notes": str(e),
         })
         return {"status": "Failed", "error": str(e)}
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Inverter Fault Alert
 # ──────────────────────────────────────────────────────────────────────────────

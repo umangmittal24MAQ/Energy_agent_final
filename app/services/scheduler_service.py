@@ -837,10 +837,7 @@ def _run_solar_scraper() -> None:
         logger.error(f"Scraper subprocess failed (Exit Code {exc.returncode}).")
     except Exception as exc:
         logger.error(f"Scraper completely failed to trigger: {exc}")
-
-    # Run inverter monitor after every scraper tick (success or fail).
-    # Even if the scraper failed, the monitor may still find the previous row
-    # on SharePoint and update the tracker / send a fault alert.
+        
     try:
         from app.services.inverter_monitor import run_inverter_monitor
         run_inverter_monitor()
@@ -1010,7 +1007,10 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
             if trigger_source == "api_manual":
                 logger.warning("Data missing during manual Send Now. Sending operator reminder instead of fallback report.")
                 from app.services.email_service import send_operator_reminder
-                result = send_operator_reminder()
+                cfg = load_scheduler_config()
+                base = datetime.strptime(cfg.get("start_time", "09:00"), "%H:%M")
+                deadline_str = (base + timedelta(minutes=90)).strftime("%I:%M %p")
+                result = send_operator_reminder(reminder_number=1, total_reminders=1, deadline_str=deadline_str)
                 return result
 
             logger.warning("Data missing at deadline! Sending fallback report with yesterday's data.")
@@ -1024,8 +1024,8 @@ def run_daily_report_automation(trigger_source: str = "scheduler") -> Dict[str, 
             _release_distributed_lock(job_name)
 
 
-def _run_operator_reminder_cycle() -> None:
-    """Triggered at 9:00, 9:30, 10:00 to verify data or send early report."""
+def _run_operator_reminder_cycle(reminder_number: int = 1, total_reminders: int = 3, deadline_str: str = "10:30 AM") -> None:
+    """Triggered at cycle_1/2/3 to verify data or send early report."""
     job_name = "operator_reminder_cycle"
     if not _acquire_distributed_lock(job_name, ttl_seconds=300):
         return
@@ -1039,9 +1039,13 @@ def _run_operator_reminder_cycle() -> None:
             return
 
         if not check_grid_diesel_entry_exists():
-            logger.info("Grid data missing! Attempting to send reminder...")
+            logger.info(f"Grid data missing! Sending reminder {reminder_number}/{total_reminders}...")
             from app.services.email_service import send_operator_reminder
-            result = send_operator_reminder()
+            result = send_operator_reminder(
+                reminder_number=reminder_number,
+                total_reminders=total_reminders,
+                deadline_str=deadline_str,
+            )
             if result.get("status") == "Success":
                 logger.info(f"Reminder Email sent successfully: {result.get('notes')}")
             else:
@@ -1226,11 +1230,13 @@ def _schedule_daily_job(send_time: str) -> None:
         coalesce=True,
     )
 
-    for cycle, job_id in [
+    deadline_str = final_cycle.strftime("%I:%M %p")   # e.g. "10:30 AM"
+
+    for reminder_num, (cycle, job_id) in enumerate([
         (cycle_1, "operator_reminder_cycle_1"),
         (cycle_2, "operator_reminder_cycle_2"),
         (cycle_3, "operator_reminder_cycle_3"),
-    ]:
+    ], start=1):
         _scheduler.add_job(
             _run_operator_reminder_cycle,
             trigger=CronTrigger(
@@ -1243,8 +1249,12 @@ def _schedule_daily_job(send_time: str) -> None:
             replace_existing=True,
             max_instances=1,
             coalesce=True,
+            kwargs={
+                "reminder_number": reminder_num,
+                "total_reminders": 3,
+                "deadline_str": deadline_str,
+            },
         )
-
 
 def initialize_scheduler_from_config() -> None:
     """Boot sequence triggered by main.py."""
@@ -1267,6 +1277,7 @@ def initialize_scheduler_from_config() -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        next_run_time=datetime.now(ZoneInfo("Asia/Kolkata"))
     )
 
     _scheduler.add_job(
