@@ -1,0 +1,442 @@
+[
+  {
+    "timestamp": "2026-05-28T12:04:12.712513+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 26, 2026",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260526.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-28T12:04:15.067284+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:04:17.264297+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 1 recipients"
+  },
+  {
+    "timestamp": "2026-05-28T12:04:17.295429+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on May 28, 2026 at 12:04 PM IST",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-05-28T12:11:38.565854+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 26, 2026",
+    "recipients": "rajeev@maqsoftware.com, vimalv@maqsoftware.com, ramc@maqsoftware.com, amrishs@maqsoftware.com, naveenk@maqsoftware.com, rohitj@maqsoftware.com, shaileshl@maqsoftware.com, ojasu@maqsoftware.com, vihan.bhardwaj@colliers.com, reandf@maqsoftware.com, indiaadmin@maqsoftware.com, krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260526.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-28T12:11:41.941535+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:11:44.362668+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 1 recipients"
+  },
+  {
+    "timestamp": "2026-05-28T12:11:44.393395+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on May 28, 2026 at 12:11 PM IST",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-05-28T12:22:29.726357+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 26, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260526.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-28T12:22:31.457996+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:22:32.304229+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:22:33.128041+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:26:20.446475+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 26, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260526.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-28T12:26:23.210152+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:26:25.870954+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 3 recipients"
+  },
+  {
+    "timestamp": "2026-05-28T12:26:25.878386+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on May 28, 2026 at 12:26 PM IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-05-28T12:28:12.675026+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 26, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260526.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-05-28T12:28:16.921681+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for May 28, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-05-28T12:28:21.441851+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Operator reminder sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-05-28T12:28:21.461403+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on May 28, 2026 at 12:28 PM IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-06-01T11:50:21.977064+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 31, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260531.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-06-01T11:50:24.589579+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for June 01, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-06-01T11:50:27.774429+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T11:50:27.796534+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on June 01, 2026 at 11:50 AM IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-06-01T11:56:18.554764+05:30",
+    "status": "Success",
+    "kind": "daily_report",
+    "trigger_source": "test_script",
+    "subject": "Review Noida Daily Energy Optimization Report - May 31, 2026",
+    "recipients": "krishnav@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, umang.mittal@maqsoftware.com",
+    "attachment": "Energy_Report_20260531.xlsx",
+    "notes": "Daily report email sent"
+  },
+  {
+    "timestamp": "2026-06-01T11:56:21.747143+05:30",
+    "status": "Success",
+    "kind": "data_correction_alert",
+    "trigger_source": "validation",
+    "subject": "\u26a0\ufe0f Action Required: Fix Excel Data for June 01, 2026 (3 error(s))",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "3 validation error(s) reported"
+  },
+  {
+    "timestamp": "2026-06-01T11:56:24.877655+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T11:56:24.918843+05:30",
+    "status": "Success",
+    "kind": "inverter_fault_alert",
+    "trigger_source": "inverter_monitor",
+    "subject": "\u26a0\ufe0f Inverter Fault Alert \u2014 2 inverters on June 01, 2026 at 11:56 AM IST",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Faulted inverters: Inverter2, Inverter4"
+  },
+  {
+    "timestamp": "2026-06-01T12:04:32.062812+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 1 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:04:37.202893+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 2/3)",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 2/3 sent to 1 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:04:42.086255+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 3/3)",
+    "recipients": "umang.mittal@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 3/3 sent to 1 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:09:27.269588+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:09:32.556770+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 2/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 2/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:09:39.154903+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 3/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 3/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:21:35.370152+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:21:42.411509+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 2/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 2/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:21:47.960673+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 3/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 3/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:25:43.572710+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:25:49.304697+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 2/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 2/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:25:55.514176+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 3/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 3/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:29:23.891346+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:29:28.994982+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 2/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 2/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-01T12:29:33.904192+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 3/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 3/3 sent to 4 recipients"
+  },
+  {
+    "timestamp": "2026-06-11T09:00:22.768370+05:30",
+    "status": "Success",
+    "kind": "operator_reminder",
+    "trigger_source": "operator_reminder_cycle",
+    "subject": "Action Required: Operator Data Missing (Reminder 1/3)",
+    "recipients": "umang.mittal@maqsoftware.com, prajwal.khadse@maqsoftware.com, ishitas@maqsoftware.com, krishnav@maqsoftware.com",
+    "attachment": null,
+    "notes": "Reminder 1/3 sent to 4 recipients"
+  }
+]

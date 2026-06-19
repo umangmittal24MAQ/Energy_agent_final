@@ -146,6 +146,15 @@ def create_app() -> FastAPI:
     async def health_check():
         """Shallow health check endpoint — public, used by load balancers."""
         return {"status": "healthy", "service": settings.app_name}
+        
+    @app.post("/dev/trigger-scraper")
+    async def trigger_scraper():
+        import subprocess
+        result = subprocess.run(
+            ["python", "app/scripts/scrape_to_sharepoint.py"],
+            capture_output=True, text=True
+        )
+        return {"stdout": result.stdout, "stderr": result.stderr, "exit_code": result.returncode}
 
     # FIX R5: Deep health check now requires authentication.
     # Previously this endpoint was public and leaked raw exception messages
@@ -180,7 +189,7 @@ def create_app() -> FastAPI:
 
     # Include routers
     try:
-        from app.routes import data, kpis, export, scheduler, mail, auth
+        from app.routes import data, kpis, export, scheduler, mail, auth, weather, temperature
 
         app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
         app.include_router(data.router, prefix="/api")
@@ -188,6 +197,8 @@ def create_app() -> FastAPI:
         app.include_router(mail.router, prefix="/api")
         app.include_router(export.router, prefix="/api")
         app.include_router(scheduler.router, prefix="/api")
+        app.include_router(weather.router, prefix="/api")
+        app.include_router(temperature.router, prefix="/api")
         logger.info("All routers loaded successfully")
     except ImportError as e:
         logger.error(f"Failed to import routers: {e}", exc_info=True)
@@ -214,4 +225,3 @@ def get_app() -> FastAPI:
 
 
 app = create_app()
-

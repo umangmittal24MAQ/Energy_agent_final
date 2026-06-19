@@ -488,6 +488,139 @@ def check_grid_diesel_entry_exists() -> bool:
         return False
 
 
+def get_done_dates_from_grid_diesel(lookback_days: int = 7) -> list:
+    """
+    Returns a sorted list of date strings (YYYY-MM-DD) from the grid_and_diesel sheet
+    that have Grid Units filled in AND Status='Done', within the last `lookback_days` days.
+
+    This powers the multi-day late check: when an operator backfills 2-3 days in one
+    sitting, this returns all of them so the master engine runs for each missing date.
+
+    Returns [] on any error (safe fallback — late check simply won't fire).
+    """
+    try:
+        from .sharepoint_data_service import get_service as get_excel_service
+
+        sp_excel_service = get_excel_service()
+        df = sp_excel_service.fetch_sheet_data("grid_and_diesel")
+
+        if df is None or df.empty:
+            logger.error("[LATE CHECK] get_done_dates: sheet empty or unloadable")
+            return []
+
+        # Fix unnamed-column layout (same defensive header hunt as check_grid_diesel_entry_exists)
+        if any("Unnamed" in str(c) for c in df.columns):
+            for i, row in df.head(10).iterrows():
+                if any("date" in str(val).lower() for val in row.values):
+                    df.columns = row.values
+                    df = df.iloc[i + 1:].reset_index(drop=True)
+                    break
+
+        date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
+        if not date_col:
+            logger.error("[LATE CHECK] get_done_dates: no date column found")
+            return []
+
+        # Multi-format date parsing (matches existing logic)
+        parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
+        if parsed_dates.isna().any():
+            fallback_str = df[date_col].astype(str).str.strip()
+            parsed_dates = parsed_dates.fillna(
+                pd.to_datetime(fallback_str, format="%d-%b-%y", errors="coerce")
+            )
+            parsed_dates = parsed_dates.fillna(
+                pd.to_datetime(fallback_str, errors="coerce", dayfirst=True)
+            )
+        df["_parsed_date"] = parsed_dates.dt.date
+
+        IST = ZoneInfo("Asia/Kolkata")
+        today = pd.Timestamp.now(tz=IST).date()
+        cutoff = today - timedelta(days=lookback_days)
+        # Include today itself — operator may have entered today's data late
+        df = df[(df["_parsed_date"] >= cutoff) & (df["_parsed_date"] <= today)]
+
+        def _normalized(name: Any) -> str:
+            return str(name).lower().replace(" ", "").replace("_", "").replace("\n", "")
+
+        def _has_value(value: Any) -> bool:
+            if value is None or pd.isna(value):
+                return False
+            return str(value).strip().lower() not in {"", "nan", "none", "null"}
+
+        grid_units_col = next(
+            (c for c in df.columns if "grid" in _normalized(c) and "unit" in _normalized(c)),
+            None,
+        )
+        status_col = next((c for c in df.columns if "status" in str(c).lower()), None)
+
+        if not grid_units_col:
+            logger.error("[LATE CHECK] get_done_dates: Grid Units column not found")
+            return []
+
+        done_dates = []
+        for date_val, group in df.groupby("_parsed_date"):
+            has_grid = group[grid_units_col].apply(_has_value).any()
+            if not has_grid:
+                continue
+            if status_col:
+                if not group[status_col].apply(_status_is_done).any():
+                    continue  # Data present but operator hasn't marked Done yet
+            # No status column → treat grid data presence as sufficient
+            done_dates.append(date_val.strftime("%Y-%m-%d"))
+
+        done_dates.sort()
+        logger.info(f"[LATE CHECK] get_done_dates: found Done rows for {done_dates}")
+        return done_dates
+
+    except Exception as e:
+        logger.error(f"[LATE CHECK] get_done_dates crashed: {e}", exc_info=True)
+        return []
+
+
+def get_dates_in_master_data(lookback_days: int = 7) -> set:
+    """
+    Returns the set of solar_date strings (YYYY-MM-DD) already present in
+    Master-data.xlsx within the last `lookback_days` days.
+
+    The master engine writes solar_date (operator_date - 1) as the Date column,
+    so we compare against that. Used by _run_late_data_check to skip dates that
+    are already synced and stop firing once everything is up to date.
+
+    Returns empty set on any error (safe — causes late check to re-run, not skip).
+    """
+    try:
+        from .sharepoint_data_service import get_service as get_excel_service
+
+        sp_excel_service = get_excel_service()
+        df = sp_excel_service.fetch_sheet_data("master_data")
+
+        if df is None or df.empty:
+            logger.warning("[LATE CHECK] get_dates_in_master_data: master_data sheet empty")
+            return set()
+
+        date_col = next((c for c in df.columns if "date" in str(c).lower()), None)
+        if not date_col:
+            logger.error("[LATE CHECK] get_dates_in_master_data: no Date column found in master_data")
+            return set()
+
+        parsed = pd.to_datetime(df[date_col], errors="coerce", dayfirst=True)
+        IST = ZoneInfo("Asia/Kolkata")
+        today = pd.Timestamp.now(tz=IST).date()
+        cutoff = today - timedelta(days=lookback_days)
+
+        existing = {
+            d.strftime("%Y-%m-%d")
+            for d in parsed.dt.date.dropna()
+            if cutoff <= d <= today
+        }
+        logger.info(f"[LATE CHECK] get_dates_in_master_data: found {existing}")
+        return existing
+
+    except Exception as e:
+        logger.error(f"[LATE CHECK] get_dates_in_master_data crashed: {e}", exc_info=True)
+        return set()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Column Validation Rules
 # Each entry: (matcher_keywords, rule_type, rule_details)
@@ -854,6 +987,25 @@ def _run_data_refresh() -> None:
         logger.error(f"Error in data refresh task: {e}")
 
 
+def _build_specs_for_operator_date(operator_date_str: str, today_str: str) -> Dict[str, Any]:
+    """
+    Build a single master-engine run spec for a given operator_date.
+
+    The universal rule is: solar_date = operator_date - 1 day.
+    fallback_operator_date is only needed when operator_date != today (i.e. the
+    operator filled in a past row; the engine may need today's row as a grid
+    data fallback).
+    """
+    op_dt = datetime.strptime(operator_date_str, "%Y-%m-%d")
+    solar_date_str = (op_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+    fallback = today_str if operator_date_str != today_str else None
+    return {
+        "operator_date": operator_date_str,
+        "solar_date": solar_date_str,
+        "fallback_operator_date": fallback,
+    }
+
+
 def _run_late_data_check() -> None:
     """
     Runs every 30 min (10:30-19:30) after the report deadline.
@@ -865,7 +1017,10 @@ def _run_late_data_check() -> None:
       Gate 2 — sent as fallback?        Was it sent WITHOUT real operator data?
                                         If report was sent with real data → SKIP.
                                         No need to re-run, master-data is already correct.
-      Gate 3 — operator data now Done?  Has the operator submitted since the fallback?
+      Gate 3 — any Done dates found?    Fetch all dates (up to 7 days back) that
+                                        have Grid Units filled in AND Status='Done'.
+                                        This handles operators who backfill 2-3 days
+                                        in one sitting.
 
     WHY Gate 2 matters:
       Without it, every 30-min tick after a successful early/on-time report would
@@ -875,13 +1030,14 @@ def _run_late_data_check() -> None:
     _late_engine_ran_today flag intentionally REMOVED — it was blocking corrections
     after the first successful late run. Gate 2 + Gate 3 together are sufficient.
 
-    Monday: processes both Sunday and Monday rows with correct solar dates,
-    following the universal rule (solar_date = operator_date - 1).
+    Multi-day backfill: if the operator submits data for, say, 2026-06-13, 2026-06-14,
+    and 2026-06-15 in one go, Gate 3 returns all three dates and the engine runs once
+    per date in chronological order. Each run uses solar_date = operator_date - 1 day,
+    consistent with the universal solar date rule.
     """
     IST = ZoneInfo("Asia/Kolkata")
     now = datetime.now(IST)
-    today_str     = now.strftime("%Y-%m-%d")
-    yesterday_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    today_str = now.strftime("%Y-%m-%d")
 
     # Gate 1: report must have been sent today
     if not tracker_is_locked_for_today():
@@ -893,34 +1049,37 @@ def _run_late_data_check() -> None:
         logger.info("[LATE CHECK] Skipping — report was already sent with real data today, master-data is correct")
         return
 
-    # Gate 3: operator data must now be present and marked Done
-    if not check_grid_diesel_entry_exists():
+    # Gate 3: find ALL Done dates in grid_and_diesel within the lookback window
+    done_dates = get_done_dates_from_grid_diesel(lookback_days=7)
+    if not done_dates:
+        logger.info("[LATE CHECK] No Done rows in grid_and_diesel yet. Will retry next tick.")
         return
 
-    logger.info("[LATE CHECK] Operator data found after fallback report. Running master engine silently...")
+    # Gate 4: cross-check against master_data — only process dates not yet synced.
+    # solar_date = operator_date - 1, so we check whether (operator_date - 1) exists
+    # in master_data. If ALL done_dates are already synced, stop firing for the day.
+    master_dates = get_dates_in_master_data(lookback_days=7)
 
-    if now.weekday() == 0:  # Monday
-        saturday_str = (now - timedelta(days=2)).strftime("%Y-%m-%d")
-        specs = [
-            {
-                "operator_date": yesterday_str,   # Sunday row → solar from Saturday
-                "solar_date":    saturday_str,
-                "fallback_operator_date": today_str,
-            },
-            {
-                "operator_date": today_str,        # Monday row → solar from Sunday
-                "solar_date":    yesterday_str,
-                "fallback_operator_date": None,
-            },
-        ]
-    else:
-        specs = [
-            {
-                "operator_date": today_str,
-                "solar_date":    yesterday_str,
-                "fallback_operator_date": None,
-            }
-        ]
+    pending_dates = []
+    for op_date in done_dates:
+        op_dt = datetime.strptime(op_date, "%Y-%m-%d")
+        solar_date = (op_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+        if solar_date not in master_dates:
+            pending_dates.append(op_date)
+        else:
+            logger.info(f"[LATE CHECK] {op_date} → solar {solar_date} already in master_data. Skipping.")
+
+    if not pending_dates:
+        logger.info("[LATE CHECK] ✅ All Done dates already synced to master_data. Nothing to do.")
+        return
+
+    logger.info(
+        f"[LATE CHECK] {len(pending_dates)} date(s) not yet in master_data: {pending_dates}. "
+        "Running master engine for each..."
+    )
+
+    # Build one spec per pending date; chronological order matters (earlier rows first)
+    specs = [_build_specs_for_operator_date(d, today_str) for d in pending_dates]
 
     for spec in specs:
         result = _run_master_data_engine_once(
@@ -929,7 +1088,7 @@ def _run_late_data_check() -> None:
             spec.get("fallback_operator_date"),
         )
         if result["status"] == "Success":
-            logger.info(f"[LATE CHECK] ✅ Master engine complete for {spec['operator_date']}.")
+            logger.info(f"[LATE CHECK] ✅ Master engine complete for operator={spec['operator_date']} → solar={spec['solar_date']}.")
         else:
             logger.error(f"[LATE CHECK] Engine failed for {spec['operator_date']}: {result.get('error')}")
 
@@ -1277,12 +1436,11 @@ def initialize_scheduler_from_config() -> None:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        next_run_time=datetime.now(ZoneInfo("Asia/Kolkata"))
     )
 
     _scheduler.add_job(
         _run_late_data_check,
-        trigger=CronTrigger(hour='10-19', minute='30', timezone=ZoneInfo("Asia/Kolkata")),
+        trigger=CronTrigger(hour='10-19', minute='0,30', timezone=ZoneInfo("Asia/Kolkata")),
         id="late_data_check",
         replace_existing=True,
         max_instances=1,
@@ -1330,6 +1488,35 @@ def initialize_scheduler_from_config() -> None:
         coalesce=True,
     )
     logger.info("Meter OCR engine scheduled: start 07:00 IST / stop 20:00 IST daily.")
+
+    # --- Daily Temperature Optimisation Email ---
+    temp_email_time = os.getenv("DAILY_TEMP_EMAIL_TIME", "08:00")
+    try:
+        _temp_time = datetime.strptime(temp_email_time, "%H:%M")
+    except ValueError:
+        _temp_time = datetime.strptime("08:00", "%H:%M")
+
+    def _send_daily_temperature_email() -> None:
+        try:
+            from app.services.email_service import send_temperature_optimization_email
+            send_temperature_optimization_email(trigger_source="scheduler")
+        except Exception as _exc:
+            logger.error(f"[TEMP EMAIL SCHEDULER] Failed: {_exc}")
+
+    _scheduler.add_job(
+        _send_daily_temperature_email,
+        trigger=CronTrigger(
+            day_of_week="mon-sat",
+            hour=_temp_time.hour,
+            minute=_temp_time.minute,
+            timezone=ZoneInfo("Asia/Kolkata"),
+        ),
+        id="daily_temperature_email",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    logger.info(f"Daily temperature email scheduled: {temp_email_time} IST (Mon-Sat).")
 
     # 🚀 THE FIX: Start it immediately if the server boots up during the day!
     IST = ZoneInfo("Asia/Kolkata")

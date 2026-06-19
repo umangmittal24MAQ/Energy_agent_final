@@ -1029,3 +1029,279 @@ def send_inverter_alert(
             "notes":          str(e),
         })
         return {"status": "Failed", "error": str(e)}
+    
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Daily Temperature Optimization Email
+# ──────────────────────────────────────────────────────────────────────────────
+def send_temperature_optimization_email(trigger_source: str = "scheduler") -> Dict[str, Any]:
+    """
+    Send the daily optimal indoor temperature recommendation email.
+    Uses the ASHRAE 55 model from temperature_service and the existing Graph transport.
+    """
+    try:
+        from app.services.temperature_service import get_temperature_recommendation
+
+        rec = get_temperature_recommendation()
+        if rec is None:
+            logger.error("[TEMP EMAIL] Weather data unavailable — skipping temperature email.")
+            return {"status": "Failed", "error": "Weather data unavailable"}
+
+        email_from = os.getenv("EMAIL_FROM", "energyreports@maqsoftware.com")
+        to_list    = _emails_from_display(_get_reminder_to())
+        cc_list    = _emails_from_display(_get_reminder_cc())
+        all_recipients = to_list + cc_list
+
+        if not all_recipients:
+            return {"status": "Failed", "error": "No recipients configured (OPERATOR_EMAIL)"}
+
+        IST   = ZoneInfo("Asia/Kolkata")
+        today = datetime.now(IST).strftime("%B %d, %Y")
+
+        html_body = _build_temperature_email_html(rec, today)
+        subject   = f"🌡️ Daily HVAC Optimisation Brief — Noida Campus — {today}"
+
+        _graph_send(
+            from_address=email_from,
+            to_list=to_list,
+            cc_list=cc_list,
+            subject=subject,
+            html_body=html_body,
+        )
+
+        _append_scheduler_send_history({
+            "timestamp":      datetime.now(IST).isoformat(),
+            "status":         "Success",
+            "kind":           "temperature_optimization",
+            "trigger_source": trigger_source,
+            "subject":        subject,
+            "recipients":     ", ".join(all_recipients),
+            "attachment":     None,
+            "notes":          f"Setpoint={rec['target_setpoint']}°C | Savings={rec['estimated_savings_pct']}%",
+        })
+
+        logger.info(f"[TEMP EMAIL] Sent to {len(all_recipients)} recipients. Setpoint={rec['target_setpoint']}°C")
+        return {"status": "Success", "recipients": ", ".join(all_recipients)}
+
+    except Exception as e:
+        logger.error(f"[TEMP EMAIL] Failed: {e}")
+        _append_scheduler_send_history({
+            "timestamp":      datetime.now(ZoneInfo("Asia/Kolkata")).isoformat(),
+            "status":         "Failed",
+            "kind":           "temperature_optimization",
+            "trigger_source": trigger_source,
+            "subject":        "Daily HVAC Optimisation Brief",
+            "recipients":     "",
+            "attachment":     None,
+            "notes":          str(e),
+        })
+        return {"status": "Failed", "error": str(e)}
+
+
+def _build_temperature_email_html(rec: dict, date_str: str) -> str:
+    """Build the professional HTML email for the temperature optimization brief."""
+
+    def _score_bar(score: int, color: str) -> str:
+        return (
+            f'<div style="background:#e5e7eb;border-radius:999px;height:8px;width:100%;overflow:hidden;">'
+            f'<div style="background:{color};width:{score}%;height:100%;border-radius:999px;"></div>'
+            f'</div>'
+        )
+
+    modulations_html = ""
+    for label, delta in rec.get("modulations", {}).items():
+        sign  = "▲" if delta > 0 else "▼"
+        color = "#16a34a" if delta > 0 else "#dc2626"
+        modulations_html += (
+            f'<tr>'
+            f'<td style="padding:5px 10px;font-size:12px;color:#374151;">{html_lib.escape(label)}</td>'
+            f'<td style="padding:5px 10px;font-size:12px;font-weight:700;color:{color};text-align:right;">'
+            f'{sign} {abs(delta):.1f}°C</td>'
+            f'</tr>'
+        )
+
+    insights_html = ""
+    for insight in rec.get("insights", []):
+        insights_html += (
+            f'<li style="margin-bottom:8px;color:#374151;font-size:13px;line-height:1.5;">'
+            f'{html_lib.escape(insight)}</li>'
+        )
+
+    recs_html = ""
+    for r in rec.get("recommendations", []):
+        recs_html += (
+            f'<li style="margin-bottom:6px;color:#374151;font-size:13px;line-height:1.5;">'
+            f'✅ {html_lib.escape(r)}</li>'
+        )
+
+    cost = rec.get("cost_estimate", {})
+    hvac_mode_label = {
+        "DEHUMIDIFICATION_PRIORITY": "🌧️ Dehumidification Priority",
+        "MAX_ECO_EFFICIENCY":        "♻️ Max Eco Efficiency",
+        "STANDARD_AUTOMATION":       "⚙️ Standard Automation",
+    }.get(rec.get("hvac_mode", ""), rec.get("hvac_mode", ""))
+
+    bounded_note = ""
+    if rec.get("bounded_by_guardrails"):
+        bounded_note = (
+            f'<p style="font-size:11px;color:#9ca3af;margin:4px 0 0;">'
+            f'⚠️ Guardrail applied: {html_lib.escape(rec.get("bound_reason",""))}</p>'
+        )
+
+    return f"""
+    <html>
+    <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 0;background:#f3f4f6;">
+      <tr><td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- HEADER -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#1e3a5f 0%,#1d4ed8 100%);padding:28px 32px;">
+              <p style="margin:0;font-size:11px;letter-spacing:2px;color:#93c5fd;text-transform:uppercase;">Energy Optimization Agent</p>
+              <h1 style="margin:6px 0 0;font-size:22px;font-weight:700;color:#ffffff;">Daily HVAC Optimisation Brief</h1>
+              <p style="margin:6px 0 0;font-size:13px;color:#bfdbfe;">Noida Campus — Sector 145 &nbsp;|&nbsp; {html_lib.escape(date_str)}</p>
+            </td>
+          </tr>
+
+          <!-- SETPOINT HERO -->
+          <tr>
+            <td style="padding:28px 32px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border:1px solid #bfdbfe;border-radius:10px;overflow:hidden;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <p style="margin:0;font-size:11px;letter-spacing:1.5px;color:#1d4ed8;text-transform:uppercase;">Recommended HVAC Setpoint</p>
+                    <p style="margin:6px 0;font-size:42px;font-weight:800;color:#1e3a5f;letter-spacing:-1px;">{rec['target_setpoint']}°C</p>
+                    <p style="margin:0;font-size:13px;color:#3b82f6;">Comfort band: {rec['setpoint_range']}</p>
+                    {bounded_note}
+                  </td>
+                  <td style="padding:20px 24px;text-align:right;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Operational Mode</p>
+                    <p style="margin:4px 0 0;font-size:15px;font-weight:600;color:#1e3a5f;">{html_lib.escape(hvac_mode_label)}</p>
+                    <p style="margin:8px 0 0;font-size:11px;color:#6b7280;">Est. Energy Saving</p>
+                    <p style="margin:2px 0 0;font-size:22px;font-weight:700;color:#16a34a;">{rec['estimated_savings_pct']}%</p>
+                    <p style="margin:0;font-size:11px;color:#9ca3af;">vs static 22°C</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- SCORES -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="48%" style="padding-right:8px;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+                      <p style="margin:0 0 4px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Comfort Score</p>
+                      <p style="margin:0 0 8px;font-size:26px;font-weight:700;color:#1e3a5f;">{rec['comfort_score']}<span style="font-size:14px;color:#9ca3af;">/100</span></p>
+                      {_score_bar(rec['comfort_score'], '#3b82f6')}
+                    </div>
+                  </td>
+                  <td width="4%"></td>
+                  <td width="48%" style="padding-left:8px;">
+                    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;">
+                      <p style="margin:0 0 4px;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Energy Efficiency</p>
+                      <p style="margin:0 0 8px;font-size:26px;font-weight:700;color:#1e3a5f;">{rec['energy_efficiency_score']}<span style="font-size:14px;color:#9ca3af;">/100</span></p>
+                      {_score_bar(rec['energy_efficiency_score'], '#16a34a')}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- WEATHER SNAPSHOT -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#1e3a5f;">🌤️ Live Weather Inputs</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                <tr>
+                  <td style="padding:10px 14px;font-size:12px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Temperature</td>
+                  <td style="padding:10px 14px;font-size:12px;font-weight:600;color:#111827;text-align:right;border-bottom:1px solid #e5e7eb;">{rec['outdoor_temperature']}°C (feels like {rec['feels_like']}°C)</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px;font-size:12px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Humidity</td>
+                  <td style="padding:10px 14px;font-size:12px;font-weight:600;color:#111827;text-align:right;border-bottom:1px solid #e5e7eb;">{rec['humidity']}%</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px;font-size:12px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Cloud Cover</td>
+                  <td style="padding:10px 14px;font-size:12px;font-weight:600;color:#111827;text-align:right;border-bottom:1px solid #e5e7eb;">{rec['cloud_cover']}%</td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 14px;font-size:12px;color:#6b7280;">Wind Speed</td>
+                  <td style="padding:10px 14px;font-size:12px;font-weight:600;color:#111827;text-align:right;">{rec['wind_speed']} m/s — {html_lib.escape(rec['weather_condition'])}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- MODULATIONS -->
+          {"" if not rec.get("modulations") else f'''
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#1e3a5f;">🔍 Algorithm Influence Log</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                <tr style="background:#f3f4f6;">
+                  <th style="padding:8px 10px;font-size:11px;color:#6b7280;text-align:left;font-weight:600;">Factor</th>
+                  <th style="padding:8px 10px;font-size:11px;color:#6b7280;text-align:right;font-weight:600;">Setpoint Shift</th>
+                </tr>
+                {modulations_html}
+              </table>
+            </td>
+          </tr>'''}
+
+          <!-- INSIGHTS -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#1e3a5f;">💡 Energy Saving Insights</p>
+              <ul style="margin:0;padding-left:18px;">{insights_html}</ul>
+            </td>
+          </tr>
+
+          <!-- RECOMMENDATIONS -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <p style="margin:0 0 10px;font-size:13px;font-weight:600;color:#1e3a5f;">📋 Recommended Actions</p>
+              <ul style="margin:0;padding-left:18px;">{recs_html}</ul>
+            </td>
+          </tr>
+
+          <!-- COST ESTIMATE -->
+          <tr>
+            <td style="padding:20px 32px 0;">
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;">
+                <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#166534;">💰 Cost Saving Estimate</p>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-size:12px;color:#374151;padding:3px 0;">Per AC unit (1.5T, 8h/day)</td>
+                    <td style="font-size:12px;font-weight:700;color:#15803d;text-align:right;padding:3px 0;">₹{cost.get('cost_saved_inr_per_ac','—')}/day</td>
+                  </tr>
+                  <tr>
+                    <td style="font-size:12px;color:#374151;padding:3px 0;">Campus estimate (~50 units)</td>
+                    <td style="font-size:16px;font-weight:800;color:#15803d;text-align:right;padding:3px 0;">₹{cost.get('campus_saving_inr_per_day','—')}/day</td>
+                  </tr>
+                </table>
+                <p style="margin:8px 0 0;font-size:11px;color:#9ca3af;">{html_lib.escape(str(cost.get('basis','')))}</p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="padding:24px 32px;border-top:1px solid #e5e7eb;margin-top:20px;">
+              <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">
+                Automated HVAC Optimisation Report &nbsp;|&nbsp; Energy Optimization Agent &nbsp;|&nbsp;
+                Noida Campus &nbsp;|&nbsp; Do not reply
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td></tr>
+    </table>
+    </body>
+    </html>
+    """

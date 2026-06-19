@@ -80,6 +80,12 @@ class Settings(BaseSettings):
         description="CORS allowed origins. Must be set via environment variable. In production, use only HTTPS URLs (e.g., https://your-frontend.azurestaticapps.net). Never include localhost in production."
     )
 
+    # Solar Farm Physical Specs (from manager, June 2026)
+    solar_system_capacity_kw: float = Field(default=598.0, validation_alias="SOLAR_SYSTEM_CAPACITY_KW")
+    solar_total_panels: int = Field(default=1049, validation_alias="SOLAR_TOTAL_PANELS")
+    solar_panel_wattage_wp: int = Field(default=570, validation_alias="SOLAR_PANEL_WATTAGE_WP")
+    solar_target_daily_kwh: float = Field(default=3000.0, validation_alias="SOLAR_TARGET_DAILY_KWH")
+
     # Cost Configuration
     grid_cost_per_unit: float = Field(default=7.11, validation_alias="GRID_COST_PER_UNIT")
     diesel_cost_per_unit: float = Field(default=25.0, validation_alias="DIESEL_COST_PER_UNIT")

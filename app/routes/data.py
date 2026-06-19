@@ -32,17 +32,32 @@ async def get_live_unified_data(
 
 
 @router.get("/live/inverter-uptime")
-async def get_live_inverter_uptime():
+async def get_live_inverter_uptime(
+    date: Optional[str] = Query(None, description="Date (YYYY-MM-DD). Defaults to today. Past dates read from tracker."),
+):
     """
-    On-demand inverter uptime/downtime for today.
-    Reads directly from UnifiedSolarData — no tracker cache.
-    Called when the frontend Solar tab is opened.
+    Inverter uptime/downtime for a given date.
+    - Today (default): reads live from UnifiedSolarData sheet.
+    - Past dates: reads from inverter_tracker.json (up to 30 days back).
     """
-    from app.services.inverter_monitor import get_today_uptime_from_sheet
-    result = get_today_uptime_from_sheet()
+    from app.services.inverter_monitor import get_uptime_from_tracker_for_date
+    result = get_uptime_from_tracker_for_date(date_str=date)
     if "error" in result:
         raise HTTPException(status_code=503, detail=result["error"])
     return result
+
+
+@router.get("/inverter-uptime/trend")
+async def get_inverter_uptime_trend(
+    days: int = Query(30, ge=1, le=30, description="Number of days of history (1-30)."),
+):
+    """
+    Daily uptime % per inverter for the last N days (max 30).
+    Reads entirely from inverter_tracker.json — no SharePoint call.
+    Used by the frontend trend chart.
+    """
+    from app.services.inverter_monitor import get_inverter_trend
+    return get_inverter_trend(days=days)
 
 
 @router.get("/debug/status")

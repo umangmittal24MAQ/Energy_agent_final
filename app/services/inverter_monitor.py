@@ -40,7 +40,7 @@ IST = ZoneInfo("Asia/Kolkata")
 # ── Inverter definitions ──────────────────────────────────────────────────────
 INVERTERS = ["Inverter1", "Inverter2", "Inverter3", "Inverter4", "Inverter5"]
 INTERVAL_MINS = 30          # scraper cadence
-TRACKER_KEEP_DAYS = 7       # how many days of history to retain in tracker
+TRACKER_KEEP_DAYS = 30      # how many days of history to retain in tracker
 
 # ── Tracker path (mirrors scheduler_service.py PERSIST_DIR logic) ─────────────
 def _get_tracker_path() -> Path:
@@ -448,6 +448,7 @@ def get_today_uptime_from_sheet() -> Dict[str, Any]:
             "date": today_str,
             "as_of": now_ist.isoformat(),
             "rows_processed": 0,
+            "day_generation_kwh": 0.0,
             "inverters": {
                 inv: {"uptime_mins": 0, "downtime_mins": 0,
                       "uptime_hrs": 0.0, "downtime_hrs": 0.0, "uptime_pct": 0.0}
@@ -485,12 +486,201 @@ def get_today_uptime_from_sheet() -> Dict[str, Any]:
             "uptime_pct":    uptime_pct,
         }
 
-    logger.info(f"[INVERTER] on-demand live calc for {today_str}: {inverters_out}")
+    # ── Extract today's actual generation (kWh) from the latest row ──────────
+    # The frontend uses this as "Actual so far" in the Expected vs Actual widget.
+    def _norm(c: str) -> str:
+        return "".join(ch for ch in str(c).lower() if ch.isalnum())
+
+    time_col = next((c for c in today_rows.columns if _norm(c) == "time"), None)
+    if time_col:
+        today_rows = today_rows.copy()
+        today_rows["_time"] = pd.to_datetime(today_rows[time_col], format="mixed", errors="coerce")
+        today_rows = today_rows.sort_values("_time")
+
+    # Read "Day Generation (kWh)" from the latest today row.
+    # This is a running cumulative counter — the last row of the day
+    # holds the highest (most current) value.
+    # We do NOT use YesterdayGen — that column is written by tomorrow's scraper
+    # run and always contains the PREVIOUS day's total, not today's live value.
+    daygen_col = next(
+        (c for c in today_rows.columns if _norm(c) in {
+            "daygenerationkwh",    # "Day Generation (kWh)"  <- exact match
+            "daygeneration",       # "DayGeneration"
+            "daygeneration(kwh)",  # "DayGeneration(kWh)"
+        }),
+        None,
+    )
+
+    def _safe(val) -> float:
+        try:
+            return float(str(val).replace(",", "").strip())
+        except (TypeError, ValueError):
+            return 0.0
+
+    latest = today_rows.iloc[-1]
+    day_generation_kwh = 0.0
+    if daygen_col:
+        day_generation_kwh = _safe(latest.get(daygen_col, 0))
+    else:
+        logger.warning(
+            "[INVERTER] 'Day Generation (kWh)' column not found. "
+            "Columns present: %s", list(today_rows.columns)
+        )
+
+    logger.info(f"[INVERTER] on-demand live calc for {today_str}: {inverters_out}, day_generation_kwh={day_generation_kwh}")
 
     return {
-        "date":           today_str,
-        "as_of":          now_ist.isoformat(),
-        "rows_processed": len(today_rows),
-        "inverters":      inverters_out,
-        "fault_count":    fault_count,
+        "date":                today_str,
+        "as_of":               now_ist.isoformat(),
+        "rows_processed":      len(today_rows),
+        "day_generation_kwh":  round(day_generation_kwh, 1),
+        "inverters":           inverters_out,
+        "fault_count":         fault_count,
+    }
+
+# ── Date-selective uptime (from tracker) ─────────────────────────────────────
+def get_uptime_from_tracker_for_date(date_str: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Returns inverter uptime/downtime for a specific date from inverter_tracker.json.
+
+    For today: falls back to get_today_uptime_from_sheet() so the live 30-min
+    granularity is always used for the current day (tracker only updates every
+    30 min and may be slightly behind).
+
+    For past dates: reads directly from tracker (up to 30 days back).
+
+    Args:
+        date_str: "YYYY-MM-DD". Defaults to today (IST) if None.
+
+    Returns same shape as get_today_uptime_from_sheet().
+    """
+    IST = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(IST)
+    today_str = now_ist.strftime("%Y-%m-%d")
+
+    if date_str is None or date_str == today_str:
+        # Always use live sheet data for today
+        return get_today_uptime_from_sheet()
+
+    # Validate date format
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return {"error": f"Invalid date format '{date_str}'. Expected YYYY-MM-DD."}
+
+    tracker = load_tracker()
+    day_data = tracker.get(date_str, {})
+
+    if not day_data:
+        return {
+            "date": date_str,
+            "as_of": now_ist.isoformat(),
+            "rows_processed": 0,
+            "inverters": {
+                inv: {
+                    "uptime_mins": 0, "downtime_mins": 0,
+                    "uptime_hrs": 0.0, "downtime_hrs": 0.0, "uptime_pct": 0.0,
+                }
+                for inv in INVERTERS
+            },
+            "fault_count": 0,
+            "source": "tracker",
+            "tracker_found": False,
+        }
+
+    inverters_out: Dict[str, Any] = {}
+    fault_count = 0
+
+    for inv in INVERTERS:
+        entry = day_data.get(inv, {"uptime_mins": 0, "downtime_mins": 0})
+        up_mins = int(entry.get("uptime_mins", 0))
+        dn_mins = int(entry.get("downtime_mins", 0))
+        total_mins = up_mins + dn_mins
+        uptime_pct = round(up_mins / total_mins * 100, 1) if total_mins > 0 else 0.0
+        if dn_mins > 0:
+            fault_count += 1
+
+        inverters_out[inv] = {
+            "uptime_mins":   up_mins,
+            "downtime_mins": dn_mins,
+            "uptime_hrs":    round(up_mins / 60, 2),
+            "downtime_hrs":  round(dn_mins / 60, 2),
+            "uptime_pct":    uptime_pct,
+        }
+
+    return {
+        "date":          date_str,
+        "as_of":         now_ist.isoformat(),
+        "rows_processed": sum(
+            int(day_data.get(inv, {}).get("uptime_mins", 0) +
+                day_data.get(inv, {}).get("downtime_mins", 0)) // INTERVAL_MINS
+            for inv in INVERTERS
+        ) // len(INVERTERS),
+        "inverters":     inverters_out,
+        "fault_count":   fault_count,
+        "source":        "tracker",
+        "tracker_found": True,
+    }
+
+
+# ── 30-day trend from tracker ─────────────────────────────────────────────────
+def get_inverter_trend(days: int = 30) -> Dict[str, Any]:
+    """
+    Returns daily uptime_pct per inverter for the last `days` days.
+    Reads entirely from inverter_tracker.json — no SharePoint call needed.
+
+    Today's entry uses the tracker snapshot (updated every 30 min by the monitor).
+    Missing dates return 0 uptime_pct with tracker_found=False so the frontend
+    can render gaps correctly.
+
+    Return shape:
+    {
+        "days": 30,
+        "inverters": ["Inverter1", ..., "Inverter5"],
+        "trend": [
+            {
+                "date": "2026-05-18",
+                "tracker_found": True,
+                "Inverter1": {"uptime_pct": 100.0, "uptime_hrs": 12.5, "downtime_hrs": 0.0},
+                "Inverter2": { ... },
+                ...
+            },
+            ...   ← sorted chronologically, oldest first
+        ]
+    }
+    """
+    IST = ZoneInfo("Asia/Kolkata")
+    today = datetime.now(IST).date()
+    tracker = load_tracker()
+
+    trend = []
+    for offset in range(days - 1, -1, -1):   # oldest → newest
+        date = today - timedelta(days=offset)
+        date_str = date.strftime("%Y-%m-%d")
+        day_data = tracker.get(date_str, {})
+        found = bool(day_data)
+
+        entry: Dict[str, Any] = {
+            "date": date_str,
+            "tracker_found": found,
+        }
+
+        for inv in INVERTERS:
+            inv_data = day_data.get(inv, {"uptime_mins": 0, "downtime_mins": 0})
+            up_mins = int(inv_data.get("uptime_mins", 0))
+            dn_mins = int(inv_data.get("downtime_mins", 0))
+            total   = up_mins + dn_mins
+            entry[inv] = {
+                "uptime_pct":    round(up_mins / total * 100, 1) if total > 0 else 0.0,
+                "uptime_hrs":    round(up_mins / 60, 2),
+                "downtime_hrs":  round(dn_mins / 60, 2),
+                "downtime_mins": dn_mins,
+            }
+
+        trend.append(entry)
+
+    return {
+        "days":      days,
+        "inverters": INVERTERS,
+        "trend":     trend,
     }

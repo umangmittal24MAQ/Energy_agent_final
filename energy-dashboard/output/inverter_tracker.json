@@ -1,0 +1,684 @@
+{
+    "2026-05-19": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 810,
+            "downtime_mins": 90
+        }
+    },
+    "2026-05-20": {
+        "Inverter1": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 780,
+            "downtime_mins": 60
+        },
+        "Inverter3": {
+            "uptime_mins": 840,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 840,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 840,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-21": {
+        "Inverter1": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        }
+    },
+    "2026-05-22": {
+        "Inverter1": {
+            "uptime_mins": 660,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 660,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 660,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 660,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 660,
+            "downtime_mins": 30
+        }
+    },
+    "2026-05-23": {
+        "Inverter1": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 810,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        }
+    },
+    "2026-05-24": {
+        "Inverter1": {
+            "uptime_mins": 840,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 810,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 840,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-25": {
+        "Inverter1": {
+            "uptime_mins": 660,
+            "downtime_mins": 90
+        },
+        "Inverter2": {
+            "uptime_mins": 690,
+            "downtime_mins": 60
+        },
+        "Inverter3": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-26": {
+        "Inverter1": {
+            "uptime_mins": 600,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 570,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 600,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 600,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 570,
+            "downtime_mins": 30
+        }
+    },
+    "2026-05-27": {
+        "Inverter1": {
+            "uptime_mins": 720,
+            "downtime_mins": 60
+        },
+        "Inverter2": {
+            "uptime_mins": 750,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 750,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 750,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 780,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-28": {
+        "Inverter1": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 270,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-29": {
+        "Inverter1": {
+            "uptime_mins": 270,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 270,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 300,
+            "downtime_mins": 0
+        }
+    },
+    "2026-05-30": {
+        "Inverter1": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 90,
+            "downtime_mins": 30
+        }
+    },
+    "2026-05-31": {
+        "Inverter1": {
+            "uptime_mins": 810,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 810,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 810,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 780,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-01": {
+        "Inverter1": {
+            "uptime_mins": 240,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 240,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-02": {
+        "Inverter1": {
+            "uptime_mins": 60,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 60,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 60,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 60,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 60,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-03": {
+        "Inverter1": {
+            "uptime_mins": 600,
+            "downtime_mins": 30
+        },
+        "Inverter2": {
+            "uptime_mins": 630,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 600,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 600,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 630,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-04": {
+        "Inverter1": {
+            "uptime_mins": 810,
+            "downtime_mins": 90
+        },
+        "Inverter2": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-05": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 840,
+            "downtime_mins": 60
+        },
+        "Inverter5": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-06": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 810,
+            "downtime_mins": 90
+        }
+    },
+    "2026-06-07": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-08": {
+        "Inverter1": {
+            "uptime_mins": 870,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 840,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 870,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-09": {
+        "Inverter1": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 720,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 750,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 720,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-10": {
+        "Inverter1": {
+            "uptime_mins": 360,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 330,
+            "downtime_mins": 30
+        },
+        "Inverter3": {
+            "uptime_mins": 360,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 360,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 330,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-11": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 840,
+            "downtime_mins": 60
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-12": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 780,
+            "downtime_mins": 120
+        }
+    },
+    "2026-06-13": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 810,
+            "downtime_mins": 90
+        }
+    },
+    "2026-06-14": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 840,
+            "downtime_mins": 60
+        }
+    },
+    "2026-06-15": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 840,
+            "downtime_mins": 60
+        }
+    },
+    "2026-06-16": {
+        "Inverter1": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 900,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 840,
+            "downtime_mins": 60
+        },
+        "Inverter4": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        },
+        "Inverter5": {
+            "uptime_mins": 870,
+            "downtime_mins": 30
+        }
+    },
+    "2026-06-17": {
+        "Inverter1": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 270,
+            "downtime_mins": 0
+        }
+    },
+    "2026-06-18": {
+        "Inverter1": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter2": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter3": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter4": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        },
+        "Inverter5": {
+            "uptime_mins": 120,
+            "downtime_mins": 0
+        }
+    }
+}
